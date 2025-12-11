@@ -12,8 +12,6 @@ import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.text.Text;
-import javafx.scene.text.TextFlow;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import java.io.*;
@@ -27,8 +25,7 @@ public class GUI extends Application {
     private Stage primaryStage;
     private Scene splashScene;
     private Scene mainScene;
-    private TextFlow terminalFlow;
-    private ScrollPane terminalScroll;
+    private TextArea terminalArea;
     private TextField commandInput;
     private Label repoStateLabel;
     private Label helpTextLabel;
@@ -267,14 +264,18 @@ public class GUI extends Application {
         termHeader.getChildren().addAll(dots, termLabel, branchBadge);
         terminalPanel.getChildren().add(termHeader);
 
-        terminalFlow = new TextFlow();
-        terminalFlow.setLineSpacing(2);
-        terminalFlow.setStyle("-fx-background-color: #232121;");
-
-        terminalScroll = new ScrollPane(terminalFlow);
-        terminalScroll.setFitToWidth(true);
-        terminalScroll.setStyle("-fx-background: #232121; -fx-border-color: #232121;");
-        terminalScroll.setPrefHeight(400);
+        terminalArea = new TextArea();
+        terminalArea.setEditable(false);
+        terminalArea.setWrapText(true);
+        terminalArea.setFont(Font.font("Consolas", 12));
+        terminalArea.setStyle(
+                "-fx-control-inner-background: #232121;" +
+                        "-fx-text-fill: #e8e8e8;" +
+                        "-fx-highlight-fill: #555555;" +
+                        "-fx-highlight-text-fill: white;" +
+                        "-fx-border-color: #232121;");
+        terminalArea.setPrefHeight(400);
+        terminalArea.setFocusTraversable(true);
 
         HBox inputBox = new HBox(10);
         commandInput = new TextField();
@@ -296,7 +297,7 @@ public class GUI extends Application {
         inputBox.getChildren().addAll(commandInput, runBtn, clearBtn, copyBtn);
         HBox.setHgrow(commandInput, Priority.ALWAYS);
 
-        terminalPanel.getChildren().addAll(terminalScroll, inputBox);
+        terminalPanel.getChildren().addAll(terminalArea, inputBox);
 
         commandInput.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.ENTER) {
@@ -751,13 +752,13 @@ public class GUI extends Application {
                             updateFileExplorer();
                             updateSMKTreeView();
                             updateVisuals();
-                            terminalScroll.setVvalue(1.0);
+                            scrollTerminalToBottom();
                         });
                 } else {
                     String errorMsg = "Error: Command must start with 'smk'\n";
                     Platform.runLater(() -> {
                         appendColoredOutput(errorMsg);
-                        terminalScroll.setVvalue(1.0);
+                        scrollTerminalToBottom();
                     });
                 }
             } catch (Exception e) {
@@ -768,7 +769,7 @@ public class GUI extends Application {
                 String finalErrorMsg = errorMsg;
                 Platform.runLater(() -> {
                     appendColoredOutput(finalErrorMsg);
-                    terminalScroll.setVvalue(1.0);
+                    scrollTerminalToBottom();
                 });
             } finally {
                 System.setOut(originalOut);
@@ -914,19 +915,16 @@ public class GUI extends Application {
             }
             appendLine(line, c);
         }
-        terminalScroll.setVvalue(1.0);
+        scrollTerminalToBottom();
     }
 
     private void appendLine(String text, Color color) {
-        Text t = new Text(text + "\n");
-        t.setFill(color);
-        t.setFont(Font.font("Consolas", 12));
-        terminalFlow.getChildren().add(t);
+        terminalArea.appendText(text + "\n");
         terminalBuffer.append(text).append("\n");
     }
 
     private void clearTerminal() {
-        terminalFlow.getChildren().clear();
+        terminalArea.clear();
         terminalBuffer.setLength(0);
         historyIndex = commandHistory.size();
     }
@@ -935,6 +933,11 @@ public class GUI extends Application {
         ClipboardContent content = new ClipboardContent();
         content.putString(terminalBuffer.toString());
         Clipboard.getSystemClipboard().setContent(content);
+    }
+
+    private void scrollTerminalToBottom() {
+        // Preserve selection while keeping the viewport pinned to the latest output
+        Platform.runLater(() -> terminalArea.setScrollTop(Double.MAX_VALUE));
     }
 
     private void addToHistory(String raw) {
