@@ -50,7 +50,7 @@ public class Main {
             if (f.startsWith(SMK_DIR + "/") || f.startsWith(SMK_DIR + "\\")) continue;
             if (f.contains("/" + SMK_DIR + "/") || f.contains("\\" + SMK_DIR + "\\")) continue;
             if (f.equals(SMK_DIR)) continue;
-            
+
             // Skip hidden files (starting with .) except in subdirectories
             Path filePath = Paths.get(f);
             if (filePath.getFileName() != null && filePath.getFileName().toString().startsWith(".")) {
@@ -60,11 +60,11 @@ public class Main {
             try {
                 String h = ObjectManager.hashBlobFromFile(f);
                 String headHash = headTree.get(f);
-                
+
                 // Only stage if file is new or changed from HEAD
                 if (headHash == null || !headHash.equals(h)) {
-                idx.put(f, h);
-                System.out.println("add " + f);
+                    idx.put(f, h);
+                    System.out.println("add " + f);
                 }
             } catch (IOException e) {
                 System.err.println("Error processing file " + f + ": " + e.getMessage());
@@ -75,13 +75,13 @@ public class Main {
 
     public static void cmdAdd(final String file) {
         // Never allow adding .smk files
-        if (file.startsWith(SMK_DIR + "/") || file.startsWith(SMK_DIR + "\\") || 
-            file.contains("/" + SMK_DIR + "/") || file.contains("\\" + SMK_DIR + "\\") ||
-            file.equals(SMK_DIR)) {
+        if (file.startsWith(SMK_DIR + "/") || file.startsWith(SMK_DIR + "\\") ||
+                file.contains("/" + SMK_DIR + "/") || file.contains("\\" + SMK_DIR + "\\") ||
+                file.equals(SMK_DIR)) {
             System.out.println("fatal: cannot add .smk directory");
             return;
         }
-        
+
         Path filePath = Paths.get(file);
         if (!Files.exists(filePath)) {
             System.out.println("fatal: pathspec '" + file + "' did not match any files");
@@ -93,12 +93,12 @@ public class Main {
             IndexMap idx = IndexManager.readIndex();
             IndexMap headTree = CommitManager.readHeadTree();
             String headHash = headTree.get(file);
-            
+
             // Only stage if file is new or changed from HEAD
             if (headHash == null || !headHash.equals(h)) {
-            idx.put(file, h);
-            IndexManager.writeIndex(idx);
-            System.out.println("add " + file);
+                idx.put(file, h);
+                IndexManager.writeIndex(idx);
+                System.out.println("add " + file);
             } else {
                 System.out.println("File '" + file + "' unchanged from HEAD, not staged");
             }
@@ -125,7 +125,8 @@ public class Main {
 
             if (oneline) {
                 String shortMsg = msg.contains("\n") ? msg.substring(0, msg.indexOf('\n')) : msg;
-                System.out.println(cur + " " + (shortMsg.isEmpty() ? "(no message)" : shortMsg));
+                String shortHash = cur.length() > 7 ? cur.substring(0, 7) : cur;
+                System.out.println(shortHash + " " + (shortMsg.isEmpty() ? "(no message)" : shortMsg));
             } else {
                 System.out.println("commit " + cur + "\n");
                 System.out.println("    " + msg + "\n");
@@ -287,7 +288,7 @@ public class Main {
             Path p = Paths.get(kv.getKey());
             try {
                 if (p.getParent() != null) {
-                Files.createDirectories(p.getParent());
+                    Files.createDirectories(p.getParent());
                 }
                 Utils.writeFile(p, obj.content());
             } catch (IOException e) {
