@@ -471,7 +471,13 @@ public class Main {
                     cmdStatus();
                     break;
                 case "branch":
-                    if (argsList.size() == 1) {
+                    if (argsList.size() >= 2 && argsList.get(1).equals("-d")) {
+                        if (argsList.size() < 3) {
+                            System.out.println("Usage: smk branch -d <name>");
+                        } else {
+                            BranchManager.deleteBranch(argsList.get(2));
+                        }
+                    } else if (argsList.size() == 1) {
                         List<String> bs = BranchManager.listBranches();
                         for (String b : bs) System.out.println(b);
                     } else {
