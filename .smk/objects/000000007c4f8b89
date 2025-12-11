@@ -1,0 +1,139 @@
+blob
+3362
+# SMK VCS - Compilation and Run Instructions
+
+## Project Structure
+
+```
+vcs2/
+├── src/
+│   ├── core/           # Core VCS classes (package: core)
+│   │   ├── BranchManager.java
+│   │   ├── CommitManager.java
+│   │   ├── ConfigManager.java
+│   │   ├── DiffManager.java
+│   │   ├── IndexManager.java
+│   │   ├── IndexMap.java
+│   │   ├── MergeManager.java
+│   │   ├── ObjectManager.java
+│   │   └── Utils.java
+│   ├── GUI.java        # JavaFX GUI application
+│   └── Main.java       # Command-line interface
+```
+
+## Compilation Commands
+
+### 1. Compile Core Classes and Main
+
+```bash
+javac -cp src src/core/*.java src/Main.java
+```
+
+This compiles all classes in the `core` package and the `Main` class.
+
+### 2. Compile GUI (Requires JavaFX)
+
+**Option A: With JavaFX installed (JAVAFX_HOME set)**
+
+```bash
+javac --module-path "%JAVAFX_HOME%\lib" --add-modules javafx.controls -cp src src/GUI.java
+```
+
+**Option B: If JavaFX is in your classpath**
+
+```bash
+javac -cp "path/to/javafx/lib/*:src" src/GUI.java
+```
+
+**Option C: Compile everything at once**
+
+```bash
+javac --module-path "%JAVAFX_HOME%\lib" --add-modules javafx.controls -cp src src/core/*.java src/Main.java src/GUI.java
+```
+
+## Running Commands
+
+### Command-Line Interface (CLI)
+
+```bash
+# From project root directory
+java -cp src Main init
+java -cp src Main add .
+java -cp src Main commit -m "Initial commit"
+java -cp src Main status
+```
+
+### GUI Application
+
+**Option A: With JavaFX installed**
+
+```bash
+java --module-path "%JAVAFX_HOME%\lib" --add-modules javafx.controls -cp src GUI
+```
+
+**Option B: If JavaFX is in your classpath**
+
+```bash
+java -cp "path/to/javafx/lib/*:src" GUI
+```
+
+## Installing JavaFX (Required for GUI)
+
+1. Download JavaFX SDK from: https://openjfx.io/
+2. Extract to a folder (e.g., `C:\javafx-sdk-17`)
+3. Set environment variable:
+   ```cmd
+   setx JAVAFX_HOME "C:\javafx-sdk-17"
+   ```
+4. Restart your terminal/command prompt
+
+## Quick Start
+
+### For Command-Line Only:
+
+```bash
+# Compile
+javac -cp src src/core/*.java src/Main.java
+
+# Run
+java -cp src Main init
+java -cp src Main add .
+java -cp src Main commit -m "First commit"
+```
+
+### For GUI:
+
+```bash
+# 1. Install JavaFX first (see above)
+
+# 2. Compile everything
+javac --module-path "%JAVAFX_HOME%\lib" --add-modules javafx.controls -cp src src/core/*.java src/Main.java src/GUI.java
+
+# 3. Run GUI
+java --module-path "%JAVAFX_HOME%\lib" --add-modules javafx.controls -cp src GUI
+```
+
+## Troubleshooting
+
+**"package core does not exist"**
+- Make sure you're compiling from the project root
+- Check that `src/core/` directory exists with all Java files
+
+**"package javafx does not exist"**
+- JavaFX is not installed or JAVAFX_HOME is not set
+- Download from https://openjfx.io/ and set JAVAFX_HOME
+
+**"Error: module not found: javafx.controls"**
+- JAVAFX_HOME is not set correctly
+- Or JavaFX is not installed
+- Use Option B or C for compilation if JavaFX is in classpath
+
+**GUI can't find Main class**
+- Make sure you compiled Main.java first
+- Check that classpath includes `src` directory
+
+**Commands not working in GUI**
+- Make sure the repository directory is correct
+- The GUI runs commands in the selected directory
+- Check that `.smk` folder exists (run `smk init` first)
+

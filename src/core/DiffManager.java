@@ -1,0 +1,83 @@
+package core;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+public class DiffManager {
+
+    // NOTE: This class relies on placeholder classes core.Utils, core.IndexManager, and core.ObjectManager
+    // defined in previous responses for file and object I/O.
+
+    public static void showDiff() {
+        IndexMap idx = IndexManager.readIndex();
+
+        for (Map.Entry<String, String> kv : idx.entrySet()) {
+            String path = kv.getKey();
+            String blob = kv.getValue();
+
+            String workingFileContent;
+            try {
+                workingFileContent = Utils.readFileStr(path);
+            } catch (IOException e) {
+                // If the file can't be read (e.g., deleted from workdir but still in index), skip it or handle as deletion
+                continue;
+            }
+
+            ObjectManager.ObjectContent indexedObject = ObjectManager.readObjectContent(blob);
+            if (!"blob".equals(indexedObject.type())) continue;
+
+            String indexedContent = indexedObject.content();
+
+            if (!workingFileContent.equals(indexedContent)) {
+                System.out.println("diff -- " + path);
+
+                // Simplified line-by-line comparison (not a true, sophisticated diff algorithm)
+                try (BufferedReader indexedReader = new BufferedReader(new StringReader(indexedContent));
+                     BufferedReader workingReader = new BufferedReader(new StringReader(workingFileContent))) {
+
+                    String indexedLine;
+                    String workingLine;
+
+                    // The C++ logic handles the uneven line counts implicitly by continuing the loop
+                    // until both getline() calls fail. In Java, we track line numbers and use null to represent missing lines.
+
+                    List<String> indexedLines = new ArrayList<>();
+                    while((indexedLine = indexedReader.readLine()) != null) {
+                        indexedLines.add(indexedLine);
+                    }
+
+                    List<String> workingLines = new ArrayList<>();
+                    while((workingLine = workingReader.readLine()) != null) {
+                        workingLines.add(workingLine);
+                    }
+
+                    int maxLines = Math.max(indexedLines.size(), workingLines.size());
+
+                    for (int i = 0; i < maxLines; i++) {
+                        String la = i < indexedLines.size() ? indexedLines.get(i) : "";
+                        String lb = i < workingLines.size() ? workingLines.get(i) : "";
+
+                        // Compare lines
+                        if (!la.equals(lb)) {
+                            // If the indexed line exists, show it as removed (-)
+                            if (!la.isEmpty()) {
+                                System.out.println("-" + la);
+                            }
+                            // If the working line exists, show it as added (+)
+                            if (!lb.isEmpty()) {
+                                System.out.println("+" + lb);
+                            }
+                        }
+                    }
+
+                } catch (IOException e) {
+                    System.err.println("Error reading file streams for diff: " + e.getMessage());
+                }
+            }
+        }
+    }
+}

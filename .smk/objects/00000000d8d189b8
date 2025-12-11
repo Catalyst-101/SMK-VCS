@@ -1,0 +1,20 @@
+tree
+724
+.\COMPILE_AND_RUN.md	000000007c4f8b89
+.\src\Main.java	0000000099affa51
+.\src\core\IndexMap.java	00000000b4b3504b
+.\vcs2.iml	000000008eabf57b
+.\src\core\Utils.java	000000004de6dd5f
+.\src\core\MergeManager.java	0000000095cae897
+.\src\core\BranchManager.java	00000000cb6c08b1
+.\src\core\CommitManager.java	00000000d30c21fa
+.\QUICK_START.md	0000000046f154d7
+.\.idea\modules.xml	000000006a5171ce
+.\.idea\misc.xml	00000000a507f220
+.\src\core\DiffManager.java	00000000d707435b
+.\.idea\libraries\lib.xml	000000000d87d64d
+.\src\core\ObjectManager.java	00000000ac16bf63
+.\.idea\workspace.xml	000000005ee1e16f
+.\src\core\ConfigManager.java	00000000718bed48
+.\src\core\IndexManager.java	00000000c0d827d6
+.\src\GUI.java	0000000073d3b869
