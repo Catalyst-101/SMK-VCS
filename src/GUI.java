@@ -12,24 +12,31 @@ import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.text.Text;
+import javafx.scene.text.TextFlow;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class GUI extends Application {
     private Stage primaryStage;
     private Scene splashScene;
     private Scene mainScene;
-    private TextArea terminalOutput;
+    private TextFlow terminalFlow;
+    private ScrollPane terminalScroll;
     private TextField commandInput;
     private Label repoStateLabel;
     private Label helpTextLabel;
     private Label branchBadge;
     private String currentRepoPath = System.getProperty("user.dir");
+    private final StringBuilder terminalBuffer = new StringBuilder();
+    private final List<String> commandHistory = new ArrayList<>();
+    private int historyIndex = -1;
     
     private final List<Command> commands = List.of(
             new Command("smk init", "Initialize a new repository (.smk)"),
@@ -40,13 +47,14 @@ public class GUI extends Application {
             new Command("smk status", "Show staged/unstaged/untracked files"),
             new Command("smk branch", "List branches"),
             new Command("smk branch <name>", "Create a new branch"),
+            new Command("smk branch -d <name>", "Delete a branch (not master/current)"),
             new Command("smk checkout <branch>", "Checkout a branch"),
             new Command("smk merge <branch>", "Merge a branch into current"),
             new Command("smk log", "Show full commit log"),
             new Command("smk log --oneline", "Show one-line log"),
             new Command("smk diff", "Show diff of working tree vs index"),
             new Command("smk revert <commit>", "Revert working tree to a commit"),
-            new Command("smk reset <commit>", "Reset branch to a commit"),
+//            new Command("smk reset <commit>", "Reset branch to a commit"),
             new Command("smk clone <path>", "Clone another local repo"),
             new Command("smk show <commit>", "Show metadata and message of a commit"),
             new Command("smk clean", "Remove untracked files")
@@ -54,9 +62,12 @@ public class GUI extends Application {
     
     private ListView<String> fileExplorer;
     private ListView<String> smkTreeView;
-    private TabPane sideTabs;
     private Canvas commitCanvas;
-    private Slider zoomSlider;
+    private Canvas dagCanvas;
+    private Canvas linkedListCanvas;
+    private Canvas stackCanvas;
+    private ComboBox<Double> zoomChoice;
+    private ScrollPane commitScrollPane;
 
     public static void main(String[] args) {
         launch(args);
@@ -68,7 +79,7 @@ public class GUI extends Application {
         createSplashScene();
         createMainScene();
         primaryStage.setScene(splashScene);
-        primaryStage.setTitle("SMK VCS - Orange GUI");
+        primaryStage.setTitle("SMK VCS");
         primaryStage.setMinWidth(1000);
         primaryStage.setMinHeight(600);
         primaryStage.show();
@@ -96,7 +107,7 @@ public class GUI extends Application {
             File dir = dirChooser.showDialog(primaryStage);
             if (dir != null) {
                 currentRepoPath = dir.getAbsolutePath();
-                terminalOutput.appendText("Opened repository: " + currentRepoPath + "\n");
+                appendLine("Opened repository: " + currentRepoPath, Color.web("#cfd8dc"));
                 primaryStage.setScene(mainScene);
                 updateRepoState();
             }
@@ -105,7 +116,7 @@ public class GUI extends Application {
         Button useCurrentBtn = new Button("Use Current Directory");
         useCurrentBtn.setStyle("-fx-background-color: rgba(255,255,255,0.3); -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px; -fx-background-radius: 12px; -fx-padding: 8 16;");
         useCurrentBtn.setOnAction(e -> {
-            terminalOutput.appendText("Using current directory: " + currentRepoPath + "\n");
+            appendLine("Using current directory: " + currentRepoPath, Color.web("#cfd8dc"));
             primaryStage.setScene(mainScene);
             updateRepoState();
         });
@@ -118,17 +129,17 @@ public class GUI extends Application {
 
     private void createMainScene() {
         // Left panel: tabs for Commands, File Explorer, SMK Tree
-        sideTabs = new TabPane();
+        TabPane sideTabs = new TabPane();
         sideTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         sideTabs.setPrefWidth(280);
-        
+
         // Commands Tab
         Tab commandsTab = new Tab("Commands");
         VBox commandPanel = new VBox(15);
         commandPanel.setPadding(new Insets(15));
-        commandPanel.setStyle("-fx-background-color: linear-gradient(to bottom, #5f6a82, #394150); -fx-background-radius: 15px;");
+        commandPanel.setStyle("-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00); -fx-background-radius: 15px;");
 
-        Label titleLabel = new Label("smk GUI");
+        Label titleLabel = new Label("SMK VCS");
         titleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 18px; -fx-text-fill: white;");
         commandPanel.getChildren().add(titleLabel);
 
@@ -156,13 +167,13 @@ public class GUI extends Application {
         commandPanel.getChildren().add(scrollPane);
         commandsTab.setContent(commandPanel);
         sideTabs.getTabs().add(commandsTab);
-        
+
         // File Explorer Tab
         Tab fileExplorerTab = new Tab("Files");
         VBox filePanel = new VBox(10);
         filePanel.setPadding(new Insets(15));
-        filePanel.setStyle("-fx-background-color: linear-gradient(to bottom, #5f6a82, #394150); -fx-background-radius: 15px;");
-        
+        filePanel.setStyle("-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00); -fx-background-radius: 15px;");
+
         HBox fileHeader = new HBox(10);
         Label fileLabel = new Label("File Explorer");
         fileLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: white;");
@@ -171,24 +182,24 @@ public class GUI extends Application {
         refreshFilesBtn.setOnAction(e -> updateFileExplorer());
         fileHeader.getChildren().addAll(fileLabel, refreshFilesBtn);
         filePanel.getChildren().add(fileHeader);
-        
+
         fileExplorer = new ListView<>();
-        fileExplorer.setStyle("-fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: white;");
+        fileExplorer.setStyle("-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00); -fx-background-radius: 15px;");
         fileExplorer.setPrefHeight(450);
         filePanel.getChildren().add(fileExplorer);
         fileExplorerTab.setContent(filePanel);
         sideTabs.getTabs().add(fileExplorerTab);
-        
+
         // SMK Tree View Tab
-        Tab smkTreeTab = new Tab("SMK Tree");
+        Tab smkTreeTab = new Tab("Tree");
         VBox smkPanel = new VBox(10);
         smkPanel.setPadding(new Insets(15));
-        smkPanel.setStyle("-fx-background-color: linear-gradient(to bottom, #5f6a82, #394150); -fx-background-radius: 15px;");
-        
-        Label smkLabel = new Label("SMK Structure");
+        smkPanel.setStyle("-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00); -fx-background-radius: 15px;");
+
+        Label smkLabel = new Label("Structure");
         smkLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: white;");
         smkPanel.getChildren().add(smkLabel);
-        
+
         smkTreeView = new ListView<>();
         smkTreeView.setStyle("-fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: white; -fx-font-family: 'Monospaced';");
         smkTreeView.setPrefHeight(450);
@@ -196,81 +207,129 @@ public class GUI extends Application {
         smkTreeTab.setContent(smkPanel);
         sideTabs.getTabs().add(smkTreeTab);
 
-        // Visuals Tab
+        // Visual Tab
         Tab visualsTab = new Tab("Visuals");
         VBox visualsBox = new VBox(10);
         visualsBox.setPadding(new Insets(10));
         visualsBox.setStyle("-fx-background-color: linear-gradient(to bottom, #2f3542, #1e242d);");
-        zoomSlider = new Slider(0.6, 2.0, 1.0);
-        zoomSlider.setShowTickLabels(true);
-        zoomSlider.setShowTickMarks(true);
-        zoomSlider.valueProperty().addListener((obs, o, n) -> updateVisuals());
+
         Label zoomLabel = new Label("Zoom");
         zoomLabel.setTextFill(Color.web("#cfd8dc"));
-        commitCanvas = new Canvas(900, 700);
-        VBox visContent = new VBox(8, zoomLabel, zoomSlider, commitCanvas);
+
+        zoomChoice = new ComboBox<>();
+        zoomChoice.getItems().addAll(0.75, 1.0, 1.25, 1.5, 2.0, 3.0);
+        zoomChoice.setValue(1.5);
+        zoomChoice.setCellFactory(cb -> new ListCell<>() {
+            @Override
+            protected void updateItem(Double item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? "" : (int)(item * 100) + "%");
+            }
+        });
+        zoomChoice.setButtonCell(new ListCell<>() {
+            @Override
+            protected void updateItem(Double item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? "" : (int)(item * 100) + "%");
+            }
+        });
+        zoomChoice.setOnAction(e -> updateVisuals());
+
+        commitCanvas = new Canvas(1200, 900);
+        VBox visContent = new VBox(8, zoomLabel, zoomChoice, commitCanvas);
         ScrollPane visScroll = new ScrollPane(visContent);
         visScroll.setFitToWidth(true);
+        visScroll.setFitToHeight(true);
         visualsBox.getChildren().add(visScroll);
         visualsTab.setContent(visualsBox);
         sideTabs.getTabs().add(visualsTab);
 
-        // Middle panel: terminal/editor
+
+        // -------------------------------
+        // TERMINAL PANEL FIXED TO BLACK
+        // -------------------------------
         VBox terminalPanel = new VBox(10);
         terminalPanel.setPadding(new Insets(15));
-        terminalPanel.setStyle("-fx-background-color: #fff3e0; -fx-background-radius: 15px;");
+        terminalPanel.setStyle("-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00);" + "-fx-background-radius: 15px;");
 
         HBox termHeader = new HBox(10);
         termHeader.setAlignment(Pos.CENTER_LEFT);
+
         branchBadge = new Label("master");
-        branchBadge.setStyle("-fx-background-color: #ff6a00; -fx-text-fill: white; -fx-padding: 3 8 3 8; -fx-background-radius: 12px;");
+        branchBadge.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #ff6a00; -fx-padding: 3 8; -fx-background-radius: 12px;");
+
         Label dots = new Label("● ● ●");
-        dots.setStyle("-fx-text-fill: #ff6a00;");
+        dots.setStyle("-fx-text-fill: white;");
+
         Label termLabel = new Label("smk terminal");
-        termLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #4e342e;");
+        termLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: white;");
+
         termHeader.getChildren().addAll(dots, termLabel, branchBadge);
         terminalPanel.getChildren().add(termHeader);
 
-        terminalOutput = new TextArea();
-        terminalOutput.setEditable(false);
-        terminalOutput.setStyle("-fx-font-family: 'Consolas', 'Monospaced'; -fx-background-color: #1e1e24; -fx-text-fill: #cfd8dc; -fx-font-size: 12px;");
-        terminalOutput.setPrefHeight(400);
-        terminalOutput.setWrapText(true);
+        terminalFlow = new TextFlow();
+        terminalFlow.setLineSpacing(2);
+        terminalFlow.setStyle("-fx-background-color: #232121;");
 
-        HBox inputBox = new HBox(5);
+        terminalScroll = new ScrollPane(terminalFlow);
+        terminalScroll.setFitToWidth(true);
+        terminalScroll.setStyle("-fx-background: #232121; -fx-border-color: #232121;");
+        terminalScroll.setPrefHeight(400);
+
+        HBox inputBox = new HBox(10);
         commandInput = new TextField();
         commandInput.setPromptText("Type a command (e.g. smk status)");
         commandInput.setStyle("-fx-font-family: 'Consolas', 'Monospaced';");
+
         Button runBtn = new Button("Run");
-        runBtn.setStyle("-fx-background-color: #ff6a00; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8 20;");
+        runBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #ff6a00; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8 20;");
         runBtn.setOnAction(e -> runCommand(commandInput.getText()));
 
-        inputBox.getChildren().addAll(commandInput, runBtn);
+        Button clearBtn = new Button("Clear");
+        clearBtn.setStyle("-fx-background-color: rgba(255,255,255,0.2); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8 14;");
+        clearBtn.setOnAction(e -> clearTerminal());
+
+        Button copyBtn = new Button("Copy");
+        copyBtn.setStyle("-fx-background-color: rgba(255,255,255,0.2); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8 14;");
+        copyBtn.setOnAction(e -> copyTerminal());
+
+        inputBox.getChildren().addAll(commandInput, runBtn, clearBtn, copyBtn);
         HBox.setHgrow(commandInput, Priority.ALWAYS);
 
-        terminalPanel.getChildren().addAll(terminalOutput, inputBox);
+        terminalPanel.getChildren().addAll(terminalScroll, inputBox);
 
         commandInput.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.ENTER) {
                 runCommand(commandInput.getText());
+            } else if (e.getCode() == KeyCode.UP) {
+                navigateHistory(-1);
+                e.consume();
+            } else if (e.getCode() == KeyCode.DOWN) {
+                navigateHistory(1);
+                e.consume();
             }
         });
 
-        // Right panel: repository info
+        // -------------------------------
+        // META PANEL FIX (gradient + white)
+        // -------------------------------
         VBox metaPanel = new VBox(15);
         metaPanel.setPadding(new Insets(15));
-        metaPanel.setStyle("-fx-background-color: linear-gradient(to bottom, #ffcc80, #ffb74d); -fx-background-radius: 15px;");
         metaPanel.setPrefWidth(250);
+        metaPanel.setStyle(
+                "-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00); " +
+                        "-fx-background-radius: 15px;"
+        );
 
         Label metaLabel = new Label("Repository State");
-        metaLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: #4e342e;");
+        metaLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: white;");
 
         repoStateLabel = new Label();
-        repoStateLabel.setStyle("-fx-font-family: 'Monospaced'; -fx-text-fill: #4e342e; -fx-font-size: 12px; -fx-wrap-text: true;");
+        repoStateLabel.setStyle("-fx-font-family: 'Monospaced'; -fx-text-fill: white; -fx-font-size: 12px; -fx-wrap-text: true;");
         repoStateLabel.setMaxWidth(Double.MAX_VALUE);
 
         Button refreshBtn = new Button("Refresh");
-        refreshBtn.setStyle("-fx-background-color: #ff6a00; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8px;");
+        refreshBtn.setStyle("-fx-background-color: rgba(255,255,255,0.25); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8px;");
         refreshBtn.setOnAction(e -> {
             updateRepoState();
             updateFileExplorer();
@@ -298,7 +357,7 @@ public class GUI extends Application {
         updateSMKTreeView();
         updateVisuals();
     }
-    
+
     private void updateFileExplorer() {
         try {
             List<String> files = new ArrayList<>();
@@ -359,13 +418,7 @@ public class GUI extends Application {
                     });
                 }
                 // reorder master first
-                if (branchTips.containsKey("master")) {
-                    String masterHash = branchTips.remove("master");
-                    LinkedHashMap<String, String> ordered = new LinkedHashMap<>();
-                    ordered.put("master", masterHash);
-                    ordered.putAll(branchTips);
-                    branchTips = ordered;
-                }
+                branchTips = getStringStringMap(branchTips);
                 treeItems.add("Branches:");
                 for (Map.Entry<String, String> br : branchTips.entrySet()) {
                     String bName = br.getKey();
@@ -425,10 +478,9 @@ public class GUI extends Application {
                 return;
             }
 
-            // Build commit graph
+            // Build commit graph (parents, children)
             Path objectsDir = smkDir.resolve("objects");
             Map<String, List<String>> parents = new HashMap<>();
-            Map<String, String> messages = new HashMap<>();
             if (Files.exists(objectsDir)) {
                 try (var stream = Files.list(objectsDir)) {
                     stream.forEach(p -> {
@@ -437,31 +489,25 @@ public class GUI extends Application {
                             if (!content.startsWith("commit\n")) return;
                             String hash = p.getFileName().toString();
                             List<String> ps = new ArrayList<>();
-                            String msg = "";
                             try (BufferedReader r = new BufferedReader(new StringReader(content))) {
                                 String line;
                                 boolean inMsg = false;
                                 while ((line = r.readLine()) != null) {
                                     if (line.isEmpty()) { inMsg = true; continue; }
-                                    if (!inMsg) {
-                                        if (line.startsWith("parent ")) {
-                                            ps.add(line.substring("parent ".length()));
-                                        }
-                                    } else {
-                                        msg += line + " ";
+                                    if (!inMsg && line.startsWith("parent ")) {
+                                        ps.add(line.substring("parent ".length()));
                                     }
                                 }
                             }
                             parents.put(hash, ps);
-                            messages.put(hash, msg.trim());
                         } catch (IOException ignored) {}
                     });
                 }
             }
 
-            // Determine HEAD and branches
+            // Determine HEAD and branches (master first)
             String headHash = "";
-            Map<String, String> branches = new HashMap<>();
+            Map<String, String> branches = new LinkedHashMap<>();
             try {
                 String head = Files.readString(smkDir.resolve("HEAD")).trim();
                 if (head.startsWith("ref: ")) {
@@ -475,92 +521,120 @@ public class GUI extends Application {
             Path refsHeads = smkDir.resolve("refs/heads");
             if (Files.exists(refsHeads)) {
                 try (var stream = Files.list(refsHeads)) {
+                    Map<String, String> finalBranches = branches;
                     stream.forEach(b -> {
                         try {
-                            branches.put(b.getFileName().toString(), Files.readString(b).trim());
+                            finalBranches.put(b.getFileName().toString(), Files.readString(b).trim());
                         } catch (IOException ignored) {}
                     });
                 }
             }
+            branches = getStringStringMap(branches);
 
-            // Compute depths
-            Map<String, Integer> depth = new HashMap<>();
-            Function<String, Integer> dcalc = new Function<>() {
-                @Override public Integer apply(String h) {
-                    if (depth.containsKey(h)) return depth.get(h);
-                    List<String> ps = parents.getOrDefault(h, List.of());
-                    int d = 0;
-                    for (String p : ps) d = Math.max(d, apply(p) + 1);
-                    depth.put(h, d);
-                    return d;
+            // Build children map for layout
+            Map<String, List<String>> children = new HashMap<>();
+            for (var e : parents.entrySet()) {
+                String child = e.getKey();
+                for (String p : e.getValue()) {
+                    children.computeIfAbsent(p, k -> new ArrayList<>()).add(child);
                 }
-            };
-            parents.keySet().forEach(dcalc::apply);
-            int maxDepth = depth.values().stream().max(Integer::compareTo).orElse(0);
-
-            // Assign columns
-            Map<String, Integer> col = new HashMap<>();
-            int nextCol = 0;
-            List<String> topo = new ArrayList<>(parents.keySet());
-            topo.sort(
-                    Comparator.<String, Integer>comparing(depth::get)
-                            .thenComparing(String::toString)
-            );
-            for (String h : topo) {
-                List<String> ps = parents.getOrDefault(h, List.of());
-                if (!ps.isEmpty()) {
-                    String first = ps.get(0);
-                    if (col.containsKey(first)) {
-                        col.put(h, col.get(first));
-                        continue;
-                    }
-                }
-                col.put(h, nextCol++);
             }
 
-            double yStep = 120;
-            double xStep = 170;
-            double radius = 26;
-            double width = Math.max(900, (nextCol + 1) * xStep + 200);
-            double height = Math.max(400, (maxDepth + 2) * yStep);
+            // Depth (older higher): distance from roots (commits with no parents)
+            Set<String> nodes = new HashSet<>(parents.keySet());
+            parents.values().forEach(nodes::addAll);
+            List<String> roots = nodes.stream().filter(h -> parents.getOrDefault(h, List.of()).isEmpty()).collect(Collectors.toList());
+            Map<String, Integer> depth = new HashMap<>();
+            Deque<String> dq = new ArrayDeque<>(roots);
+            roots.forEach(r -> depth.put(r, 0));
+            while (!dq.isEmpty()) {
+                String n = dq.poll();
+                int d = depth.getOrDefault(n, 0);
+                for (String c : children.getOrDefault(n, List.of())) {
+                    int nd = d + 1;
+                    if (nd > depth.getOrDefault(c, -1)) {
+                        depth.put(c, nd);
+                        dq.add(c);
+                    }
+                }
+            }
+            int maxDepth = depth.values().stream().max(Integer::compareTo).orElse(0);
+            if (nodes.isEmpty()) {
+                gc.setFill(Color.GRAY);
+                gc.fillText("No commits to visualize", 20, 40);
+                return;
+            }
+
+            // Column assignment: each branch tip gets its own column; propagate to ancestors
+            Map<String, Integer> col = new HashMap<>();
+            int colIdx = 0;
+            for (String b : branches.keySet()) {
+                String tip = branches.get(b);
+                if (tip == null || tip.isBlank()) continue;
+                Deque<String> walk = new ArrayDeque<>();
+                walk.add(tip);
+                while (!walk.isEmpty()) {
+                    String h = walk.poll();
+                    if (!col.containsKey(h)) col.put(h, colIdx);
+                    for (String p : parents.getOrDefault(h, List.of())) {
+                        if (!col.containsKey(p)) walk.add(p);
+                    }
+                }
+                colIdx++;
+            }
+            for (String h : nodes) col.putIfAbsent(h, colIdx++); // any remaining
+
+            double scale = 1.0;
+            if (zoomChoice != null && zoomChoice.getValue() != null) {
+                scale = zoomChoice.getValue();
+            }
+            scale = Math.max(0.5, Math.min(scale, 3.0)); // clamp to safe range
+            double yStep = 140 * scale;
+            double xStep = 180 * scale;
+            double radius = 24 * scale;
+            int maxCol = col.values().stream().max(Integer::compareTo).orElse(0);
+            double width = Math.max(900, (maxCol + 2) * xStep + 200);
+            double height = Math.max(500, (maxDepth + 2) * yStep + 150);
+            double maxDim = 5000; // avoid GPU RTTexture issues
+            width = Math.min(width, maxDim);
+            height = Math.min(height, maxDim);
             commitCanvas.setWidth(width);
             commitCanvas.setHeight(height);
-            gc.clearRect(0, 0, width, height);
+            gc.setFill(Color.web("#1f2530"));
+            gc.fillRect(0, 0, width, height);
 
             // Draw edges
-            gc.setStroke(Color.DARKGRAY);
-            gc.setLineWidth(2);
-            for (String h : topo) {
-                double x1 = 100 + col.getOrDefault(h, 0) * xStep;
-                double y1 = 80 + depth.getOrDefault(h, 0) * yStep;
+            gc.setStroke(Color.web("#9aa5b5"));
+            gc.setLineWidth(2 * scale);
+            for (String h : nodes) {
+                double x1 = 100 * scale + col.getOrDefault(h, 0) * xStep;
+                double y1 = 100 * scale + depth.getOrDefault(h, 0) * yStep;
                 for (String p : parents.getOrDefault(h, List.of())) {
-                    double x2 = 100 + col.getOrDefault(p, col.getOrDefault(h,0)) * xStep;
-                    double y2 = 80 + depth.getOrDefault(p, 0) * yStep;
+                    double x2 = 100 * scale + col.getOrDefault(p, col.getOrDefault(h,0)) * xStep;
+                    double y2 = 100 * scale + depth.getOrDefault(p, 0) * yStep;
                     gc.strokeLine(x1, y1, x2, y2);
-                    // arrow
                     double ang = Math.atan2(y2 - y1, x2 - x1);
-                    double ax = x2 + Math.cos(ang + Math.PI*0.9)*10;
-                    double ay = y2 + Math.sin(ang + Math.PI*0.9)*10;
-                    double bx = x2 + Math.cos(ang - Math.PI*0.9)*10;
-                    double by = y2 + Math.sin(ang - Math.PI*0.9)*10;
+                    double ax = x2 + Math.cos(ang + Math.PI*0.9)*10*scale;
+                    double ay = y2 + Math.sin(ang + Math.PI*0.9)*10*scale;
+                    double bx = x2 + Math.cos(ang - Math.PI*0.9)*10*scale;
+                    double by = y2 + Math.sin(ang - Math.PI*0.9)*10*scale;
                     gc.strokeLine(x2, y2, ax, ay);
                     gc.strokeLine(x2, y2, bx, by);
                 }
             }
 
             // Draw nodes
-            for (String h : topo) {
-                double x = 100 + col.getOrDefault(h, 0) * xStep;
-                double y = 80 + depth.getOrDefault(h, 0) * yStep;
+            for (String h : nodes) {
+                double x = 100 * scale + col.getOrDefault(h, 0) * xStep;
+                double y = 100 * scale + depth.getOrDefault(h, 0) * yStep;
                 boolean isHead = h.equals(headHash);
-                gc.setFill(isHead ? Color.web("#4CAF50") : Color.web("#ff6a00"));
+                gc.setFill(isHead ? Color.web("#8da3b8") : Color.web("#4b5563"));
                 gc.fillOval(x - radius, y - radius, radius * 2, radius * 2);
-                gc.setStroke(Color.BLACK);
+                gc.setStroke(Color.web("#cfd8dc"));
                 gc.strokeOval(x - radius, y - radius, radius * 2, radius * 2);
-                gc.setFill(Color.WHITE);
-                gc.setFont(Font.font("Consolas", 10));
-                String hashText = h;
-                gc.fillText(hashText, x - radius + 4, y + 4, radius * 2 - 8);
+                gc.setFill(Color.web("#e0e0e0"));
+                gc.setFont(Font.font("Consolas", Math.max(8, 10 * scale)));
+                gc.fillText(h, x - radius + 4, y + 4, radius * 2 - 8);
             }
 
         } catch (Exception e) {
@@ -570,11 +644,29 @@ public class GUI extends Application {
         }
     }
 
+    private Map<String, String> getStringStringMap(Map<String, String> branches) {
+        if (branches.containsKey("master")) {
+            String m = branches.remove("master");
+            LinkedHashMap<String, String> ordered = new LinkedHashMap<>();
+            ordered.put("master", m);
+            ordered.putAll(branches);
+            branches = ordered;
+        }
+        return branches;
+    }
+
     private void runCommand(String raw) {
         if (raw == null || raw.isBlank()) return;
 
-        terminalOutput.appendText("\n$ " + raw + "\n");
+        appendLine("$ " + raw, Color.web("#cfd8dc"));
         commandInput.clear();
+        addToHistory(raw);
+
+        // Built-in clear command (client-side)
+        if (raw.trim().equalsIgnoreCase("clear")) {
+            clearTerminal();
+            return;
+        }
 
         // Run command in a separate thread to avoid blocking UI
         new Thread(() -> {
@@ -595,8 +687,7 @@ public class GUI extends Application {
                     
                     // Find project root directory (where src/core/ is located)
                     // Start from current repo path and walk up to find project root
-                    File repoDir = new File(currentRepoPath);
-                    File projectRoot = repoDir;
+                    File projectRoot = new File(currentRepoPath);
                     
                     // Try to find project root by looking for src/core directory
                     while (projectRoot != null) {
@@ -651,22 +742,22 @@ public class GUI extends Application {
                     process.waitFor();
                     
                     // Update UI on JavaFX thread
-                    String finalOutput = output.toString();
-                    Platform.runLater(() -> {
-                        if (!finalOutput.isEmpty()) {
-                            terminalOutput.appendText(finalOutput);
-                        }
-                        updateRepoState();
-                        updateFileExplorer();
-                        updateSMKTreeView();
-                        updateVisuals();
-                        terminalOutput.setScrollTop(Double.MAX_VALUE);
-                    });
+                        String finalOutput = output.toString();
+                        Platform.runLater(() -> {
+                            if (!finalOutput.isEmpty()) {
+                                appendColoredOutput(finalOutput);
+                            }
+                            updateRepoState();
+                            updateFileExplorer();
+                            updateSMKTreeView();
+                            updateVisuals();
+                            terminalScroll.setVvalue(1.0);
+                        });
                 } else {
                     String errorMsg = "Error: Command must start with 'smk'\n";
                     Platform.runLater(() -> {
-                        terminalOutput.appendText(errorMsg);
-                        terminalOutput.setScrollTop(Double.MAX_VALUE);
+                        appendColoredOutput(errorMsg);
+                        terminalScroll.setVvalue(1.0);
                     });
                 }
             } catch (Exception e) {
@@ -676,8 +767,8 @@ public class GUI extends Application {
                 }
                 String finalErrorMsg = errorMsg;
                 Platform.runLater(() -> {
-                    terminalOutput.appendText(finalErrorMsg);
-                    terminalOutput.setScrollTop(Double.MAX_VALUE);
+                    appendColoredOutput(finalErrorMsg);
+                    terminalScroll.setVvalue(1.0);
                 });
             } finally {
                 System.setOut(originalOut);
@@ -805,6 +896,67 @@ public class GUI extends Application {
             updateVisuals();
         } catch (Exception e) {
             repoStateLabel.setText("Error reading repository state:\n" + e.getMessage());
+        }
+    }
+
+    private void appendColoredOutput(String text) {
+        String[] lines = text.split("\n");
+        for (String line : lines) {
+            if (line.isBlank()) continue;
+            Color c = Color.web("#4e342e"); // default
+            String lower = line.toLowerCase();
+            if (lower.startsWith("fatal") || lower.contains("error")) {
+                c = Color.web("#ef5350");
+            } else if (lower.startsWith("warning")) {
+                c = Color.web("#ffb74d");
+            } else {
+                c = Color.web("#2e7d32");
+            }
+            appendLine(line, c);
+        }
+        terminalScroll.setVvalue(1.0);
+    }
+
+    private void appendLine(String text, Color color) {
+        Text t = new Text(text + "\n");
+        t.setFill(color);
+        t.setFont(Font.font("Consolas", 12));
+        terminalFlow.getChildren().add(t);
+        terminalBuffer.append(text).append("\n");
+    }
+
+    private void clearTerminal() {
+        terminalFlow.getChildren().clear();
+        terminalBuffer.setLength(0);
+        historyIndex = commandHistory.size();
+    }
+
+    private void copyTerminal() {
+        ClipboardContent content = new ClipboardContent();
+        content.putString(terminalBuffer.toString());
+        Clipboard.getSystemClipboard().setContent(content);
+    }
+
+    private void addToHistory(String raw) {
+        if (raw == null || raw.isBlank()) return;
+        // Avoid duplicate consecutive entries
+        if (commandHistory.isEmpty() || !commandHistory.get(commandHistory.size() - 1).equals(raw)) {
+            commandHistory.add(raw);
+        }
+        historyIndex = commandHistory.size();
+    }
+
+    private void navigateHistory(int delta) {
+        if (commandHistory.isEmpty()) return;
+        historyIndex += delta;
+        if (historyIndex < 0) historyIndex = 0;
+        if (historyIndex > commandHistory.size()) historyIndex = commandHistory.size();
+
+        if (historyIndex >= 0 && historyIndex < commandHistory.size()) {
+            commandInput.setText(commandHistory.get(historyIndex));
+            commandInput.positionCaret(commandInput.getText().length());
+        } else if (historyIndex == commandHistory.size()) {
+            commandInput.clear();
         }
     }
 
