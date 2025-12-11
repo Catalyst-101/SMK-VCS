@@ -86,34 +86,34 @@ public class GUI extends Application {
         VBox splashLayout = new VBox(20);
         splashLayout.setAlignment(Pos.CENTER);
         splashLayout.setPadding(new Insets(50));
-        splashLayout.setStyle("-fx-background-color: linear-gradient(to bottom, #0B1D13, #0F2719);");
+        splashLayout.setStyle("-fx-background-color: linear-gradient(to bottom, #ff6a00, #ff9b3d);");
 
         Label title = new Label("SMK VCS");
         title.setFont(Font.font("Arial", 48));
-        title.setTextFill(Color.web("#E5F2E9"));
+        title.setTextFill(Color.WHITE);
 
         Label subtitle = new Label("Version Control System");
         subtitle.setFont(Font.font("Arial", 18));
-        subtitle.setTextFill(Color.web("#B6D0C0"));
+        subtitle.setTextFill(Color.rgb(255, 230, 204));
 
         Button openDirBtn = new Button("Open Repository Directory");
-        openDirBtn.setStyle("-fx-background-color: #1E8F55; -fx-text-fill: #E5F2E9; -fx-font-weight: bold; -fx-font-size: 16px; -fx-background-radius: 12px; -fx-padding: 10 20; -fx-border-color: #42B883; -fx-border-radius: 12px;");
+        openDirBtn.setStyle("-fx-background-color: white; -fx-text-fill: #ff6a00; -fx-font-weight: bold; -fx-font-size: 16px; -fx-background-radius: 12px; -fx-padding: 10 20;");
         openDirBtn.setOnAction(e -> {
             DirectoryChooser dirChooser = new DirectoryChooser();
             dirChooser.setTitle("Select Repository Directory");
             File dir = dirChooser.showDialog(primaryStage);
             if (dir != null) {
                 currentRepoPath = dir.getAbsolutePath();
-                appendLine("Opened repository: " + currentRepoPath, Color.web("#E5F2E9"));
+                appendLine("Opened repository: " + currentRepoPath, Color.web("#cfd8dc"));
                 primaryStage.setScene(mainScene);
                 updateRepoState();
             }
         });
 
         Button useCurrentBtn = new Button("Use Current Directory");
-        useCurrentBtn.setStyle("-fx-background-color: rgba(30,143,85,0.15); -fx-text-fill: #E5F2E9; -fx-font-weight: bold; -fx-font-size: 14px; -fx-background-radius: 12px; -fx-padding: 8 16; -fx-border-color: #42B883; -fx-border-radius: 12px;");
+        useCurrentBtn.setStyle("-fx-background-color: rgba(255,255,255,0.3); -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px; -fx-background-radius: 12px; -fx-padding: 8 16;");
         useCurrentBtn.setOnAction(e -> {
-            appendLine("Using current directory: " + currentRepoPath, Color.web("#E5F2E9"));
+            appendLine("Using current directory: " + currentRepoPath, Color.web("#cfd8dc"));
             primaryStage.setScene(mainScene);
             updateRepoState();
         });
@@ -129,21 +129,19 @@ public class GUI extends Application {
         TabPane sideTabs = new TabPane();
         sideTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         sideTabs.setPrefWidth(280);
-        sideTabs.setStyle("-fx-background-color: #0F2719; -fx-tab-min-width: 120; -fx-tab-max-width: 200; -fx-tab-background-color: #0F2719;");
 
         // Commands Tab
         Tab commandsTab = new Tab("Commands");
-        commandsTab.setStyle("-fx-background-color: #0F2719; -fx-text-base-color: #E5F2E9;");
         VBox commandPanel = new VBox(15);
         commandPanel.setPadding(new Insets(15));
-        commandPanel.setStyle("-fx-background-color: #0F2719; -fx-background-radius: 15px; -fx-border-color: #153524; -fx-border-radius: 15px;");
+        commandPanel.setStyle("-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00); -fx-background-radius: 15px;");
 
         Label titleLabel = new Label("SMK VCS");
-        titleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 18px; -fx-text-fill: #E5F2E9;");
+        titleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 18px; -fx-text-fill: white;");
         commandPanel.getChildren().add(titleLabel);
 
         helpTextLabel = new Label("Select a command");
-        helpTextLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #B6D0C0; -fx-wrap-text: true;");
+        helpTextLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #ffe6cc; -fx-wrap-text: true;");
         helpTextLabel.setMaxWidth(Double.MAX_VALUE);
         commandPanel.getChildren().add(helpTextLabel);
 
@@ -151,7 +149,7 @@ public class GUI extends Application {
         for (Command cmd : commands) {
             Button btn = new Button(cmd.cmd);
             btn.setMaxWidth(Double.MAX_VALUE);
-            btn.setStyle("-fx-background-color: #1E8F55; -fx-text-fill: #E5F2E9; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8; -fx-border-color: #42B883; -fx-border-radius: 10px;");
+            btn.setStyle("-fx-background-color: rgba(255,255,255,0.2); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8;");
             btn.setOnAction(e -> {
                 commandInput.setText(cmd.cmd);
                 helpTextLabel.setText(cmd.help);
@@ -162,37 +160,28 @@ public class GUI extends Application {
         ScrollPane scrollPane = new ScrollPane(commandListVBox);
         scrollPane.setFitToWidth(true);
         scrollPane.setPrefHeight(400);
-        scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent; -fx-border-color: #153524;");
+        scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
         commandPanel.getChildren().add(scrollPane);
         commandsTab.setContent(commandPanel);
         sideTabs.getTabs().add(commandsTab);
 
         // File Explorer Tab
         Tab fileExplorerTab = new Tab("Files");
-        fileExplorerTab.setStyle("-fx-background-color: #0F2719; -fx-text-base-color: #E5F2E9;");
         VBox filePanel = new VBox(10);
         filePanel.setPadding(new Insets(15));
-        filePanel.setStyle("-fx-background-color: #0F2719; -fx-background-radius: 15px; -fx-border-color: #153524; -fx-border-radius: 15px;");
+        filePanel.setStyle("-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00); -fx-background-radius: 15px;");
 
         HBox fileHeader = new HBox(10);
         Label fileLabel = new Label("File Explorer");
-        fileLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: #E5F2E9;");
+        fileLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: white;");
         Button refreshFilesBtn = new Button("Refresh");
-        refreshFilesBtn.setStyle("-fx-background-color: #1E8F55; -fx-text-fill: #E5F2E9; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-border-color: #42B883;");
+        refreshFilesBtn.setStyle("-fx-background-color: rgba(255,255,255,0.3); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8px;");
         refreshFilesBtn.setOnAction(e -> updateFileExplorer());
         fileHeader.getChildren().addAll(fileLabel, refreshFilesBtn);
         filePanel.getChildren().add(fileHeader);
 
         fileExplorer = new ListView<>();
-        fileExplorer.setStyle(
-                "-fx-control-inner-background: #0B1D13;" +
-                        "-fx-background-color: #0F2719;" +
-                        "-fx-text-fill: #E5F2E9;" +
-                        "-fx-selection-bar: #153524;" +
-                        "-fx-selection-bar-text: #E5F2E9;" +
-                        "-fx-cell-hover-color: #153524;" +
-                        "-fx-border-color: #42B883;" +
-                        "-fx-background-radius: 12px; -fx-border-radius: 12px;");
+        fileExplorer.setStyle("-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00); -fx-background-radius: 15px;");
         fileExplorer.setPrefHeight(450);
         filePanel.getChildren().add(fileExplorer);
         fileExplorerTab.setContent(filePanel);
@@ -200,26 +189,16 @@ public class GUI extends Application {
 
         // SMK Tree View Tab
         Tab smkTreeTab = new Tab("Tree");
-        smkTreeTab.setStyle("-fx-background-color: #0F2719; -fx-text-base-color: #E5F2E9;");
         VBox smkPanel = new VBox(10);
         smkPanel.setPadding(new Insets(15));
-        smkPanel.setStyle("-fx-background-color: #0F2719; -fx-background-radius: 15px; -fx-border-color: #153524; -fx-border-radius: 15px;");
+        smkPanel.setStyle("-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00); -fx-background-radius: 15px;");
 
         Label smkLabel = new Label("Structure");
-        smkLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: #E5F2E9;");
+        smkLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: white;");
         smkPanel.getChildren().add(smkLabel);
 
         smkTreeView = new ListView<>();
-        smkTreeView.setStyle(
-                "-fx-control-inner-background: #0B1D13;" +
-                        "-fx-background-color: #0F2719;" +
-                        "-fx-text-fill: #E5F2E9;" +
-                        "-fx-selection-bar: #153524;" +
-                        "-fx-selection-bar-text: #E5F2E9;" +
-                        "-fx-cell-hover-color: #153524;" +
-                        "-fx-font-family: 'Consolas';" +
-                        "-fx-border-color: #42B883;" +
-                        "-fx-background-radius: 12px; -fx-border-radius: 12px;");
+        smkTreeView.setStyle("-fx-background-color: rgba(255,255,255,0.1); -fx-text-fill: white; -fx-font-family: 'Monospaced';");
         smkTreeView.setPrefHeight(450);
         smkPanel.getChildren().add(smkTreeView);
         smkTreeTab.setContent(smkPanel);
@@ -227,13 +206,12 @@ public class GUI extends Application {
 
         // Visual Tab
         Tab visualsTab = new Tab("Visuals");
-        visualsTab.setStyle("-fx-background-color: #0F2719; -fx-text-base-color: #E5F2E9;");
         VBox visualsBox = new VBox(10);
         visualsBox.setPadding(new Insets(10));
-        visualsBox.setStyle("-fx-background-color: #0B1D13; -fx-border-color: #153524; -fx-border-radius: 12px;");
+        visualsBox.setStyle("-fx-background-color: linear-gradient(to bottom, #2f3542, #1e242d);");
 
         Label zoomLabel = new Label("Zoom");
-        zoomLabel.setTextFill(Color.web("#E5F2E9"));
+        zoomLabel.setTextFill(Color.web("#cfd8dc"));
 
         zoomChoice = new ComboBox<>();
         zoomChoice.getItems().addAll(0.75, 1.0, 1.25, 1.5, 2.0, 3.0);
@@ -242,31 +220,16 @@ public class GUI extends Application {
             @Override
             protected void updateItem(Double item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setText("");
-                    setStyle("-fx-background-color: #0B1D13;");
-                } else {
-                    setText((int)(item * 100) + "%");
-                    setTextFill(Color.web("#E5F2E9"));
-                    setStyle("-fx-background-color: #0B1D13;");
-                }
+                setText(empty || item == null ? "" : (int)(item * 100) + "%");
             }
         });
         zoomChoice.setButtonCell(new ListCell<>() {
             @Override
             protected void updateItem(Double item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setText("");
-                    setStyle("-fx-background-color: #0B1D13;");
-                } else {
-                    setText((int)(item * 100) + "%");
-                    setTextFill(Color.web("#E5F2E9"));
-                    setStyle("-fx-background-color: #0B1D13; -fx-border-color: #42B883;");
-                }
+                setText(empty || item == null ? "" : (int)(item * 100) + "%");
             }
         });
-        zoomChoice.setStyle("-fx-background-color: #0B1D13; -fx-text-fill: #E5F2E9; -fx-border-color: #42B883; -fx-border-radius: 8px;");
         zoomChoice.setOnAction(e -> updateVisuals());
 
         commitCanvas = new Canvas(1200, 900);
@@ -284,19 +247,19 @@ public class GUI extends Application {
         // -------------------------------
         VBox terminalPanel = new VBox(10);
         terminalPanel.setPadding(new Insets(15));
-        terminalPanel.setStyle("-fx-background-color: #0F2719;" + "-fx-background-radius: 15px; -fx-border-color: #153524; -fx-border-radius: 15px;");
+        terminalPanel.setStyle("-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00);" + "-fx-background-radius: 15px;");
 
         HBox termHeader = new HBox(10);
         termHeader.setAlignment(Pos.CENTER_LEFT);
 
         branchBadge = new Label("master");
-        branchBadge.setStyle("-fx-background-color: #1E8F55; -fx-text-fill: #E5F2E9; -fx-padding: 3 8; -fx-background-radius: 12px; -fx-border-color: #42B883; -fx-border-radius: 12px;");
+        branchBadge.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #ff6a00; -fx-padding: 3 8; -fx-background-radius: 12px;");
 
         Label dots = new Label("● ● ●");
-        dots.setStyle("-fx-text-fill: #B6D0C0;");
+        dots.setStyle("-fx-text-fill: white;");
 
         Label termLabel = new Label("smk terminal");
-        termLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #E5F2E9;");
+        termLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: white;");
 
         termHeader.getChildren().addAll(dots, termLabel, branchBadge);
         terminalPanel.getChildren().add(termHeader);
@@ -306,38 +269,29 @@ public class GUI extends Application {
         terminalArea.setWrapText(true);
         terminalArea.setFont(Font.font("Consolas", 12));
         terminalArea.setStyle(
-                "-fx-control-inner-background: #0B1D13;" +
-                        "-fx-text-fill: #E5F2E9;" +
-                        "-fx-highlight-fill: #153524;" +
-                        "-fx-highlight-text-fill: #E5F2E9;" +
-                        "-fx-border-color: #153524;" +
-                        "-fx-focus-color: #42B883;" +
-                        "-fx-faint-focus-color: #42B88322;");
+                "-fx-control-inner-background: #232121;" +
+                        "-fx-text-fill: #e8e8e8;" +
+                        "-fx-highlight-fill: #555555;" +
+                        "-fx-highlight-text-fill: white;" +
+                        "-fx-border-color: #232121;");
         terminalArea.setPrefHeight(400);
         terminalArea.setFocusTraversable(true);
 
         HBox inputBox = new HBox(10);
         commandInput = new TextField();
         commandInput.setPromptText("Type a command (e.g. smk status)");
-        commandInput.setStyle(
-                "-fx-font-family: 'Consolas', 'Monospaced';" +
-                        "-fx-text-fill: #E5F2E9;" +
-                        "-fx-prompt-text-fill: #7C998B;" +
-                        "-fx-background-color: #0B1D13;" +
-                        "-fx-border-color: #42B883;" +
-                        "-fx-highlight-fill: #153524;" +
-                        "-fx-highlight-text-fill: #E5F2E9;");
+        commandInput.setStyle("-fx-font-family: 'Consolas', 'Monospaced';");
 
         Button runBtn = new Button("Run");
-        runBtn.setStyle("-fx-background-color: #1E8F55; -fx-text-fill: #E5F2E9; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8 20; -fx-border-color: #42B883; -fx-border-radius: 10px;");
+        runBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #ff6a00; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8 20;");
         runBtn.setOnAction(e -> runCommand(commandInput.getText()));
 
         Button clearBtn = new Button("Clear");
-        clearBtn.setStyle("-fx-background-color: #153524; -fx-text-fill: #E5F2E9; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8 14; -fx-border-color: #42B883;");
+        clearBtn.setStyle("-fx-background-color: rgba(255,255,255,0.2); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8 14;");
         clearBtn.setOnAction(e -> clearTerminal());
 
         Button copyBtn = new Button("Copy");
-        copyBtn.setStyle("-fx-background-color: #153524; -fx-text-fill: #E5F2E9; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8 14; -fx-border-color: #42B883;");
+        copyBtn.setStyle("-fx-background-color: rgba(255,255,255,0.2); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10px; -fx-padding: 8 14;");
         copyBtn.setOnAction(e -> copyTerminal());
 
         inputBox.getChildren().addAll(commandInput, runBtn, clearBtn, copyBtn);
@@ -364,19 +318,19 @@ public class GUI extends Application {
         metaPanel.setPadding(new Insets(15));
         metaPanel.setPrefWidth(250);
         metaPanel.setStyle(
-                "-fx-background-color: #0F2719; " +
-                        "-fx-background-radius: 15px; -fx-border-color: #153524; -fx-border-radius: 15px;"
+                "-fx-background-color: linear-gradient(to bottom, #ff9b3d, #ff6a00); " +
+                        "-fx-background-radius: 15px;"
         );
 
         Label metaLabel = new Label("Repository State");
-        metaLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: #E5F2E9;");
+        metaLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: white;");
 
         repoStateLabel = new Label();
-        repoStateLabel.setStyle("-fx-font-family: 'Monospaced'; -fx-text-fill: #B6D0C0; -fx-font-size: 12px; -fx-wrap-text: true;");
+        repoStateLabel.setStyle("-fx-font-family: 'Monospaced'; -fx-text-fill: white; -fx-font-size: 12px; -fx-wrap-text: true;");
         repoStateLabel.setMaxWidth(Double.MAX_VALUE);
 
         Button refreshBtn = new Button("Refresh");
-        refreshBtn.setStyle("-fx-background-color: #1E8F55; -fx-text-fill: #E5F2E9; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-border-color: #42B883;");
+        refreshBtn.setStyle("-fx-background-color: rgba(255,255,255,0.25); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8px;");
         refreshBtn.setOnAction(e -> {
             updateRepoState();
             updateFileExplorer();
@@ -387,20 +341,16 @@ public class GUI extends Application {
 
         // Main layout
         Button backBtn = new Button("Back");
-        backBtn.setStyle("-fx-background-color: #1E8F55; -fx-text-fill: #E5F2E9; -fx-font-weight: bold; -fx-background-radius: 8px; -fx-border-color: #42B883;");
         backBtn.setOnAction(e -> primaryStage.setScene(splashScene));
         HBox topBar = new HBox(backBtn);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(5, 5, 5, 5));
-        topBar.setStyle("-fx-background-color: #0B1D13;");
 
         HBox mainLayout = new HBox(15, sideTabs, terminalPanel, metaPanel);
         HBox.setHgrow(terminalPanel, Priority.ALWAYS);
         mainLayout.setPadding(new Insets(15));
-        mainLayout.setStyle("-fx-background-color: #0B1D13;");
 
         VBox root = new VBox(topBar, mainLayout);
-        root.setStyle("-fx-background-color: #0B1D13;");
 
         mainScene = new Scene(root, 1400, 750);
         updateRepoState();
@@ -417,10 +367,10 @@ public class GUI extends Application {
             if (Files.exists(repoPath)) {
                 try (var stream = Files.walk(repoPath, 3)) {
                     stream.filter(Files::isRegularFile)
-                            .map(p -> repoPath.relativize(p).toString())
-                            .filter(f -> !f.startsWith(".smk") && !f.contains(".smk/") && !f.contains(".smk\\"))
-                            .sorted()
-                            .forEach(files::add);
+                        .map(p -> repoPath.relativize(p).toString())
+                        .filter(f -> !f.startsWith(".smk") && !f.contains(".smk/") && !f.contains(".smk\\"))
+                        .sorted()
+                        .forEach(files::add);
                 }
             }
 
@@ -611,7 +561,7 @@ public class GUI extends Application {
             }
             int maxDepth = depth.values().stream().max(Integer::compareTo).orElse(0);
             if (nodes.isEmpty()) {
-                gc.setFill(Color.web("#B6D0C0"));
+                gc.setFill(Color.GRAY);
                 gc.fillText("No commits to visualize", 20, 40);
                 return;
             }
@@ -651,11 +601,11 @@ public class GUI extends Application {
             height = Math.min(height, maxDim);
             commitCanvas.setWidth(width);
             commitCanvas.setHeight(height);
-            gc.setFill(Color.web("#0B1D13"));
+            gc.setFill(Color.web("#1f2530"));
             gc.fillRect(0, 0, width, height);
 
             // Draw edges
-            gc.setStroke(Color.web("#42B883"));
+            gc.setStroke(Color.web("#9aa5b5"));
             gc.setLineWidth(2 * scale);
             for (String h : nodes) {
                 double x1 = 100 * scale + col.getOrDefault(h, 0) * xStep;
@@ -679,18 +629,18 @@ public class GUI extends Application {
                 double x = 100 * scale + col.getOrDefault(h, 0) * xStep;
                 double y = 100 * scale + depth.getOrDefault(h, 0) * yStep;
                 boolean isHead = h.equals(headHash);
-                gc.setFill(isHead ? Color.web("#67D6D1") : Color.web("#1E8F55"));
+                gc.setFill(isHead ? Color.web("#8da3b8") : Color.web("#4b5563"));
                 gc.fillOval(x - radius, y - radius, radius * 2, radius * 2);
-                gc.setStroke(Color.web("#42B883"));
+                gc.setStroke(Color.web("#cfd8dc"));
                 gc.strokeOval(x - radius, y - radius, radius * 2, radius * 2);
-                gc.setFill(Color.web("#E5F2E9"));
+                gc.setFill(Color.web("#e0e0e0"));
                 gc.setFont(Font.font("Consolas", Math.max(8, 10 * scale)));
                 gc.fillText(h, x - radius + 4, y + 4, radius * 2 - 8);
             }
 
         } catch (Exception e) {
             GraphicsContext gc = commitCanvas.getGraphicsContext2D();
-            gc.setFill(Color.web("#D9534F"));
+            gc.setFill(Color.RED);
             gc.fillText("Visual error: " + e.getMessage(), 20, 40);
         }
     }
@@ -709,7 +659,7 @@ public class GUI extends Application {
     private void runCommand(String raw) {
         if (raw == null || raw.isBlank()) return;
 
-        appendLine("$ " + raw, Color.web("#E5F2E9"));
+        appendLine("$ " + raw, Color.web("#cfd8dc"));
         commandInput.clear();
         addToHistory(raw);
 
@@ -766,7 +716,7 @@ public class GUI extends Application {
 
                     // Build classpath - point to src directory in project root
                     String classpath = new File(projectRoot, "src").getAbsolutePath()
-                            + File.pathSeparator + System.getProperty("java.class.path");
+                        + File.pathSeparator + System.getProperty("java.class.path");
 
                     // ProcessBuilder - set working directory to repo, but classpath to project
                     ProcessBuilder pb = new ProcessBuilder();
@@ -783,7 +733,7 @@ public class GUI extends Application {
 
                     // Read output
                     BufferedReader reader = new BufferedReader(
-                            new InputStreamReader(process.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
+                        new InputStreamReader(process.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
                     StringBuilder output = new StringBuilder();
                     String line;
                     while ((line = reader.readLine()) != null) {
@@ -793,17 +743,17 @@ public class GUI extends Application {
                     process.waitFor();
 
                     // Update UI on JavaFX thread
-                    String finalOutput = output.toString();
-                    Platform.runLater(() -> {
-                        if (!finalOutput.isEmpty()) {
-                            appendColoredOutput(finalOutput);
-                        }
-                        updateRepoState();
-                        updateFileExplorer();
-                        updateSMKTreeView();
-                        updateVisuals();
-                        scrollTerminalToBottom();
-                    });
+                        String finalOutput = output.toString();
+                        Platform.runLater(() -> {
+                            if (!finalOutput.isEmpty()) {
+                                appendColoredOutput(finalOutput);
+                            }
+                            updateRepoState();
+                            updateFileExplorer();
+                            updateSMKTreeView();
+                            updateVisuals();
+                            scrollTerminalToBottom();
+                        });
                 } else {
                     String errorMsg = "Error: Command must start with 'smk'\n";
                     Platform.runLater(() -> {
@@ -904,15 +854,15 @@ public class GUI extends Application {
             if (Files.exists(objectsDir)) {
                 try {
                     commitCount = (int) Files.list(objectsDir)
-                            .filter(p -> {
-                                try {
-                                    String content = Files.readString(p);
-                                    return content.startsWith("commit\n");
-                                } catch (IOException e) {
-                                    return false;
-                                }
-                            })
-                            .count();
+                        .filter(p -> {
+                            try {
+                                String content = Files.readString(p);
+                                return content.startsWith("commit\n");
+                            } catch (IOException e) {
+                                return false;
+                            }
+                        })
+                        .count();
                 } catch (IOException e) {
                     // Ignore
                 }
@@ -954,14 +904,14 @@ public class GUI extends Application {
         String[] lines = text.split("\n");
         for (String line : lines) {
             if (line.isBlank()) continue;
-            Color c = Color.web("#E5F2E9"); // default
+            Color c = Color.web("#4e342e"); // default
             String lower = line.toLowerCase();
             if (lower.startsWith("fatal") || lower.contains("error")) {
-                c = Color.web("#D9534F");
+                c = Color.web("#ef5350");
             } else if (lower.startsWith("warning")) {
-                c = Color.web("#E9C46A");
+                c = Color.web("#ffb74d");
             } else {
-                c = Color.web("#57C785");
+                c = Color.web("#2e7d32");
             }
             appendLine(line, c);
         }
