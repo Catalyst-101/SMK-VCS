@@ -114,7 +114,7 @@ public class Main {
             return;
         }
 
-        while (!cur.isEmpty()) {
+        while (true) {
             ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(cur);
             if (!"commit".equals(obj.type())) break;
 
@@ -409,8 +409,7 @@ public class Main {
         List<String> files = Utils.listFilesRecursive(".");
         boolean any = false;
 
-        for (String f : files) {
-            String path = f;
+        for (String path : files) {
             // Never touch .smk directory
             if (path.startsWith(SMK_DIR + "/") || path.startsWith(SMK_DIR + "\\")) continue;
             if (path.contains("/" + SMK_DIR + "/") || path.contains("\\" + SMK_DIR + "\\")) continue;
@@ -436,7 +435,7 @@ public class Main {
 
     public static void main(String[] args) {
         List<String> argsList = Arrays.asList(args);
-        if (argsList.size() < 1) {
+        if (argsList.isEmpty()) {
             System.out.println("usage: smk <command> [args]");
             return;
         }
