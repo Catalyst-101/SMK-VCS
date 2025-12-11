@@ -117,6 +117,36 @@ public class BranchManager {
         }
     }
 
+    public static void deleteBranch(final String name) {
+        if (name == null || name.isEmpty()) {
+            System.out.println("Usage: smk branch -d <name>");
+            return;
+        }
+
+        String current = currentBranchName();
+        if (name.equals("master")) {
+            System.out.println("fatal: cannot delete master branch");
+            return;
+        }
+        if (name.equals(current)) {
+            System.out.println("fatal: cannot delete the current checked-out branch");
+            return;
+        }
+
+        Path refPath = Paths.get(REFS_HEADS_DIR, name);
+        if (!Files.exists(refPath)) {
+            System.out.println("Branch not found: " + name);
+            return;
+        }
+
+        try {
+            Files.delete(refPath);
+            System.out.println("Deleted branch " + name);
+        } catch (IOException e) {
+            System.err.println("Error deleting branch: " + e.getMessage());
+        }
+    }
+
     public static void checkoutBranch(final String name) {
         if (name == null || name.isEmpty()) {
             System.out.println("Usage: smk checkout <branch>");

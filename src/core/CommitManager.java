@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Date;
+import java.util.ArrayList;
 
 public class CommitManager {
 
@@ -122,6 +123,7 @@ public class CommitManager {
 
     public static void createCommit(final String message, boolean amend) {
         String parent = readRefHead();
+        IndexMap headTree = readHeadTree();
 
         if (amend) {
             if (parent.isEmpty()) {
@@ -132,10 +134,26 @@ public class CommitManager {
             // For amend: use current index if it has changes, otherwise use previous commit's tree
             IndexMap idx = IndexManager.readIndex();
             IndexMap parentTree = readTreeFromCommit(parent);
-            
-            // If index is empty, use parent's tree (no new changes)
+
+            // Build a full snapshot starting from parentTree, then apply staged changes
+            IndexMap newTree = new IndexMap();
+            newTree.putAll(parentTree);
+
+            // Drop files that no longer exist in the working directory (treat as deletions)
+            for (String path : new ArrayList<>(newTree.keySet())) {
+                if (!java.nio.file.Files.exists(java.nio.file.Paths.get(path))) {
+                    newTree.remove(path);
+                }
+            }
+
+            // Apply staged updates (add / modify)
+            for (Map.Entry<String, String> kv : idx.entrySet()) {
+                newTree.put(kv.getKey(), kv.getValue());
+            }
+
+            // If index was empty (amend message only), keep previous snapshot
             if (idx.isEmpty()) {
-                idx = parentTree;
+                newTree = parentTree;
             }
             
             // Get grandparent for amend
@@ -160,7 +178,7 @@ public class CommitManager {
                 parent = "";
             }
             
-            String treeHash = writeTreeFromIndex(idx);
+            String treeHash = writeTreeFromIndex(newTree);
             StringBuilder meta = new StringBuilder();
             meta.append("tree ").append(treeHash).append("\n");
             if (parent != null && !parent.isEmpty()) meta.append("parent ").append(parent).append("\n");
@@ -181,12 +199,29 @@ public class CommitManager {
 
         // Regular commit
         IndexMap idx = IndexManager.readIndex();
-        if (idx.isEmpty()) {
+
+        // Start from HEAD snapshot so previously committed files remain present
+        IndexMap newTree = new IndexMap();
+        newTree.putAll(headTree);
+
+        // Remove files that were deleted in the working directory
+        for (String path : new ArrayList<>(newTree.keySet())) {
+            if (!java.nio.file.Files.exists(java.nio.file.Paths.get(path))) {
+                newTree.remove(path);
+            }
+        }
+
+        // Apply staged changes (add/modify)
+        for (Map.Entry<String, String> kv : idx.entrySet()) {
+            newTree.put(kv.getKey(), kv.getValue());
+        }
+
+        if (newTree.isEmpty()) {
             System.out.println("No changes to commit.");
             return;
         }
 
-        String treeHash = writeTreeFromIndex(idx);
+        String treeHash = writeTreeFromIndex(newTree);
         StringBuilder meta = new StringBuilder();
         meta.append("tree ").append(treeHash).append("\n");
         if (parent != null && !parent.isEmpty()) meta.append("parent ").append(parent).append("\n");
