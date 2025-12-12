@@ -112,30 +112,7 @@ public class MergeManager {
             }
 
             // Update working directory
-            for (final String path : oldTree.keySet()) {
-                if (!newTree.containsKey(path)) {
-                    try {
-                        Files.deleteIfExists(Paths.get(path));
-                    } catch (IOException ignored) {}
-                }
-            }
-
-            for (Map.Entry<String, String> kv : newTree.entrySet()) {
-                ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(kv.getValue());
-                if (!"blob".equals(obj.type())) continue;
-
-                Path p = Paths.get(kv.getKey());
-                try {
-                    if (p.getParent() != null) {
-                        Files.createDirectories(p.getParent());
-                    }
-                    Utils.writeFile(p, obj.content());
-                } catch (IOException e) {
-                    System.err.println("Error writing file during merge: " + e.getMessage());
-                }
-            }
-
-            IndexManager.writeIndex(newTree);
+            UpdatDir(oldTree, newTree);
             CommitManager.writeRefHead(target);
             System.out.println("Fast-forward merged '" + branch + "' into current branch.");
             return;
@@ -230,30 +207,7 @@ public class MergeManager {
 
         // Update working directory with merged tree
         IndexMap oldTree = CommitManager.readHeadTree();
-        for (final String path : oldTree.keySet()) {
-            if (!mergedTree.containsKey(path)) {
-                try {
-                    Files.deleteIfExists(Paths.get(path));
-                } catch (IOException ignored) {}
-            }
-        }
-
-        for (Map.Entry<String, String> kv : mergedTree.entrySet()) {
-            ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(kv.getValue());
-            if (!"blob".equals(obj.type())) continue;
-
-            Path p = Paths.get(kv.getKey());
-            try {
-                if (p.getParent() != null) {
-                    Files.createDirectories(p.getParent());
-                }
-                Utils.writeFile(p, obj.content());
-            } catch (IOException e) {
-                System.err.println("Error writing file during merge: " + e.getMessage());
-            }
-        }
-
-        IndexManager.writeIndex(mergedTree);
+        UpdatDir(oldTree, mergedTree);
 
         // Create merge commit with two parents
         String treeHash = CommitManager.writeTreeFromIndex(mergedTree);
@@ -270,5 +224,32 @@ public class MergeManager {
         CommitManager.writeRefHead(mergeCommitHash);
 
         System.out.println("Merged '" + branch + "' into current branch. Commit: " + mergeCommitHash);
+    }
+
+    private static void UpdatDir(IndexMap oldTree, IndexMap newTree) {
+        for (final String path : oldTree.keySet()) {
+            if (!newTree.containsKey(path)) {
+                try {
+                    Files.deleteIfExists(Paths.get(path));
+                } catch (IOException ignored) {}
+            }
+        }
+
+        for (Map.Entry<String, String> kv : newTree.entrySet()) {
+            ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(kv.getValue());
+            if (!"blob".equals(obj.type())) continue;
+
+            Path p = Paths.get(kv.getKey());
+            try {
+                if (p.getParent() != null) {
+                    Files.createDirectories(p.getParent());
+                }
+                Utils.writeFile(p, obj.content());
+            } catch (IOException e) {
+                System.err.println("Error writing file during merge: " + e.getMessage());
+            }
+        }
+
+        IndexManager.writeIndex(newTree);
     }
 }
