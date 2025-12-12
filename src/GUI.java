@@ -70,18 +70,6 @@ public class GUI extends Application {
         launch(args);
     }
 
-    @Override
-    public void start(Stage stage) {
-        this.primaryStage = stage;
-        createSplashScene();
-        createMainScene();
-        primaryStage.setScene(splashScene);
-        primaryStage.setTitle("SMK VCS");
-        primaryStage.setMinWidth(1000);
-        primaryStage.setMinHeight(600);
-        primaryStage.show();
-    }
-
     private void createSplashScene() {
         VBox splashLayout = new VBox(20);
         splashLayout.setAlignment(Pos.CENTER);
@@ -122,6 +110,18 @@ public class GUI extends Application {
         buttonBox.setAlignment(Pos.CENTER);
         splashLayout.getChildren().addAll(title, subtitle, buttonBox);
         splashScene = new Scene(splashLayout, 900, 600);
+    }
+
+    @Override
+    public void start(Stage stage) {
+        this.primaryStage = stage;
+        createSplashScene();
+        createMainScene();
+        primaryStage.setScene(splashScene);
+        primaryStage.setTitle("SMK VCS");
+        primaryStage.setMinWidth(1000);
+        primaryStage.setMinHeight(600);
+        primaryStage.show();
     }
 
     private void createMainScene() {
