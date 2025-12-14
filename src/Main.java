@@ -23,11 +23,18 @@ public class Main {
     private static final String INDEX_FILE = SMK_DIR + "/index";
     private static final String CONFIG_FILE = SMK_DIR + "/config";
 
+    /**
+     * Sets up a new SMK repository by creating the folders and files
+     * needed to track commits, branches, and the staging area. It sets
+     * HEAD to point to the default master branch so the repo is ready to use.
+     */
+
     public static void initRepo() {
         if (Files.exists(Paths.get(SMK_DIR))) {
             System.out.println("Repository already initialized.");
             return;
         }
+
         try {
             Utils.ensureDir(SMK_DIR + "/objects");
             Utils.ensureDir(REFS_HEADS_DIR);
