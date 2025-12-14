@@ -541,10 +541,38 @@ public class GUI extends Application {
                 }
             }
 
-            // Depth (older higher): distance from roots (commits with no parents)
-            Set<String> nodes = new HashSet<>(parents.keySet());
-            parents.values().forEach(nodes::addAll);
-            List<String> roots = nodes.stream().filter(h -> parents.getOrDefault(h, List.of()).isEmpty()).collect(Collectors.toList());
+            // Build initial node set from all commits
+            Set<String> allNodes = new HashSet<>(parents.keySet());
+            parents.values().forEach(allNodes::addAll);
+            
+            // Filter nodes: only show commits reachable from at least one branch tip
+            Set<String> reachableNodes = new HashSet<>();
+            for (String tip : branches.values()) {
+                if (tip == null || tip.isBlank()) continue;
+                Deque<String> walk = new ArrayDeque<>();
+                walk.add(tip);
+                Set<String> visited = new HashSet<>();
+                while (!walk.isEmpty()) {
+                    String h = walk.poll();
+                    if (visited.contains(h)) continue;
+                    visited.add(h);
+                    reachableNodes.add(h);
+                    for (String p : parents.getOrDefault(h, List.of())) {
+                        if (!visited.contains(p)) walk.add(p);
+                    }
+                }
+            }
+            
+            // Only work with reachable nodes
+            Set<String> nodes = new HashSet<>(reachableNodes);
+            
+            // Depth (older higher): distance from roots (commits with no parents) - only for reachable nodes
+            List<String> roots = nodes.stream()
+                .filter(h -> {
+                    List<String> ps = parents.getOrDefault(h, List.of());
+                    return ps.isEmpty() || ps.stream().noneMatch(nodes::contains);
+                })
+                .collect(Collectors.toList());
             Map<String, Integer> depth = new HashMap<>();
             Deque<String> dq = new ArrayDeque<>(roots);
             roots.forEach(r -> depth.put(r, 0));
@@ -552,6 +580,7 @@ public class GUI extends Application {
                 String n = dq.poll();
                 int d = depth.getOrDefault(n, 0);
                 for (String c : children.getOrDefault(n, List.of())) {
+                    if (!nodes.contains(c)) continue; // Only consider reachable children
                     int nd = d + 1;
                     if (nd > depth.getOrDefault(c, -1)) {
                         depth.put(c, nd);
@@ -567,23 +596,50 @@ public class GUI extends Application {
             }
 
             // Column assignment: each branch tip gets its own column; propagate to ancestors
+            // Use a map to track which branches claim which commits
+            Map<String, Set<String>> branchCommits = new HashMap<>();
             Map<String, Integer> col = new HashMap<>();
             int colIdx = 0;
+            
+            // First pass: assign each branch tip to its own column
             for (String b : branches.keySet()) {
                 String tip = branches.get(b);
                 if (tip == null || tip.isBlank()) continue;
+                branchCommits.put(b, new HashSet<>());
                 Deque<String> walk = new ArrayDeque<>();
                 walk.add(tip);
+                Set<String> visited = new HashSet<>();
                 while (!walk.isEmpty()) {
                     String h = walk.poll();
-                    if (!col.containsKey(h)) col.put(h, colIdx);
+                    if (visited.contains(h)) continue;
+                    visited.add(h);
+                    branchCommits.get(b).add(h);
+                    // Assign column if not already assigned (prefer earlier branches)
+                    col.putIfAbsent(h, colIdx);
                     for (String p : parents.getOrDefault(h, List.of())) {
-                        if (!col.containsKey(p)) walk.add(p);
+                        if (!visited.contains(p)) walk.add(p);
                     }
                 }
                 colIdx++;
             }
-            for (String h : nodes) col.putIfAbsent(h, colIdx++); // any remaining
+            
+            // For commits that are in multiple branches, use the column of the first branch that claims it
+            // This ensures all branches are visible even if they point to the same commit
+            for (String h : nodes) {
+                if (!col.containsKey(h)) {
+                    // Find which branch(es) contain this commit
+                    for (String b : branches.keySet()) {
+                        if (branchCommits.get(b).contains(h)) {
+                            col.put(h, col.getOrDefault(branches.get(b), 0));
+                            break;
+                        }
+                    }
+                    // If still not assigned, assign to next available column
+                    if (!col.containsKey(h)) {
+                        col.put(h, colIdx++);
+                    }
+                }
+            }
 
             double scale = 1.0;
             if (zoomChoice != null && zoomChoice.getValue() != null) {
@@ -604,13 +660,15 @@ public class GUI extends Application {
             gc.setFill(Color.web("#1f2530"));
             gc.fillRect(0, 0, width, height);
 
-            // Draw edges
+            // Draw edges (only for reachable nodes)
             gc.setStroke(Color.web("#9aa5b5"));
             gc.setLineWidth(2 * scale);
             for (String h : nodes) {
                 double x1 = 100 * scale + col.getOrDefault(h, 0) * xStep;
                 double y1 = 100 * scale + depth.getOrDefault(h, 0) * yStep;
                 for (String p : parents.getOrDefault(h, List.of())) {
+                    // Only draw edge if parent is also reachable
+                    if (!nodes.contains(p)) continue;
                     double x2 = 100 * scale + col.getOrDefault(p, col.getOrDefault(h,0)) * xStep;
                     double y2 = 100 * scale + depth.getOrDefault(p, 0) * yStep;
                     gc.strokeLine(x1, y1, x2, y2);
@@ -622,6 +680,18 @@ public class GUI extends Application {
                     gc.strokeLine(x2, y2, ax, ay);
                     gc.strokeLine(x2, y2, bx, by);
                 }
+            }
+
+            // Draw branch labels at branch tips
+            gc.setFont(Font.font("Consolas", Math.max(10, 12 * scale)));
+            for (Map.Entry<String, String> br : branches.entrySet()) {
+                String branchName = br.getKey();
+                String tip = br.getValue();
+                if (tip == null || tip.isBlank() || !nodes.contains(tip)) continue;
+                double x = 100 * scale + col.getOrDefault(tip, 0) * xStep;
+                double y = 100 * scale + depth.getOrDefault(tip, 0) * yStep;
+                gc.setFill(Color.web("#ff9b3d"));
+                gc.fillText(branchName, x + radius + 8, y - radius);
             }
 
             // Draw nodes
