@@ -5,6 +5,10 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.input.ScrollEvent;
+import javafx.scene.input.ZoomEvent;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -49,7 +53,9 @@ public class GUI extends Application {
             new Command("smk merge <branch>", "Merge a branch into current"),
             new Command("smk log", "Show full commit log"),
             new Command("smk log --oneline", "Show one-line log"),
-            new Command("smk diff", "Show diff of working tree vs index"),
+            new Command("smk diff", "Show diff of working tree vs index (unstaged changes)"),
+            new Command("smk diff HEAD", "Show diff of working tree vs last commit (all changes)"),
+            new Command("smk diff <A> <B>", "Show differences between two commits"),
             new Command("smk revert <commit>", "Revert working tree to a commit"),
 //            new Command("smk reset <commit>", "Reset branch to a commit"),
             new Command("smk clone <path>", "Clone another local repo"),
@@ -233,6 +239,44 @@ public class GUI extends Application {
         zoomChoice.setOnAction(e -> updateVisuals());
 
         commitCanvas = new Canvas(1200, 900);
+        
+        // Add zoom functionality: Ctrl+wheel and touch/pinch
+        commitCanvas.setOnScroll((ScrollEvent event) -> {
+            if (event.isControlDown()) {
+                double delta = event.getDeltaY();
+                double currentZoom = zoomChoice.getValue();
+                double newZoom = currentZoom;
+                
+                if (delta > 0) {
+                    // Zoom in
+                    newZoom = Math.min(3.0, currentZoom + 0.1);
+                } else if (delta < 0) {
+                    // Zoom out
+                    newZoom = Math.max(0.5, currentZoom - 0.1);
+                }
+                
+                if (newZoom != currentZoom) {
+                    zoomChoice.setValue(newZoom);
+                    updateVisuals();
+                }
+                event.consume();
+            }
+        });
+        
+        // Touch/pinch zoom
+        commitCanvas.setOnZoom((ZoomEvent event) -> {
+            double currentZoom = zoomChoice.getValue();
+            double zoomFactor = event.getZoomFactor();
+            double newZoom = currentZoom * zoomFactor;
+            newZoom = Math.max(0.5, Math.min(3.0, newZoom));
+            
+            if (Math.abs(newZoom - currentZoom) > 0.01) {
+                zoomChoice.setValue(newZoom);
+                updateVisuals();
+            }
+            event.consume();
+        });
+        
         VBox visContent = new VBox(8, zoomLabel, zoomChoice, commitCanvas);
         ScrollPane visScroll = new ScrollPane(visContent);
         visScroll.setFitToWidth(true);
@@ -474,7 +518,7 @@ public class GUI extends Application {
             gc.clearRect(0, 0, commitCanvas.getWidth(), commitCanvas.getHeight());
 
             if (!Files.exists(smkDir)) {
-                gc.setFill(Color.GRAY);
+                gc.setFill(Color.BLACK);
                 gc.fillText("Repository not initialized", 20, 40);
                 return;
             }
@@ -590,7 +634,7 @@ public class GUI extends Application {
             }
             int maxDepth = depth.values().stream().max(Integer::compareTo).orElse(0);
             if (nodes.isEmpty()) {
-                gc.setFill(Color.GRAY);
+                gc.setFill(Color.BLACK);
                 gc.fillText("No commits to visualize", 20, 40);
                 return;
             }
@@ -657,11 +701,11 @@ public class GUI extends Application {
             height = Math.min(height, maxDim);
             commitCanvas.setWidth(width);
             commitCanvas.setHeight(height);
-            gc.setFill(Color.web("#1f2530"));
+            gc.setFill(Color.WHITE);
             gc.fillRect(0, 0, width, height);
 
             // Draw edges (only for reachable nodes)
-            gc.setStroke(Color.web("#9aa5b5"));
+            gc.setStroke(Color.web("#ff9b3d"));
             gc.setLineWidth(2 * scale);
             for (String h : nodes) {
                 double x1 = 100 * scale + col.getOrDefault(h, 0) * xStep;
@@ -682,16 +726,31 @@ public class GUI extends Application {
                 }
             }
 
-            // Draw branch labels at branch tips
+            // Draw branch labels at branch tips - group by commit to show multiple branches on separate lines
             gc.setFont(Font.font("Consolas", Math.max(10, 12 * scale)));
+            // Group branches by their tip commit
+            Map<String, List<String>> branchesByCommit = new HashMap<>();
             for (Map.Entry<String, String> br : branches.entrySet()) {
                 String branchName = br.getKey();
                 String tip = br.getValue();
                 if (tip == null || tip.isBlank() || !nodes.contains(tip)) continue;
+                branchesByCommit.computeIfAbsent(tip, k -> new ArrayList<>()).add(branchName);
+            }
+            
+            // Draw branch labels grouped by commit
+            for (Map.Entry<String, List<String>> entry : branchesByCommit.entrySet()) {
+                String tip = entry.getKey();
+                List<String> branchNames = entry.getValue();
                 double x = 100 * scale + col.getOrDefault(tip, 0) * xStep;
                 double y = 100 * scale + depth.getOrDefault(tip, 0) * yStep;
-                gc.setFill(Color.web("#ff9b3d"));
-                gc.fillText(branchName, x + radius + 8, y - radius);
+                double labelY = y - radius;
+                double lineHeight = 14 * scale;
+                
+                // Draw each branch name on a separate line
+                for (int i = 0; i < branchNames.size(); i++) {
+                    gc.setFill(Color.BLACK);
+                    gc.fillText(branchNames.get(i), x + radius + 8, labelY - (i * lineHeight));
+                }
             }
 
             // Draw nodes
@@ -699,17 +758,22 @@ public class GUI extends Application {
                 double x = 100 * scale + col.getOrDefault(h, 0) * xStep;
                 double y = 100 * scale + depth.getOrDefault(h, 0) * yStep;
                 boolean isHead = h.equals(headHash);
-                gc.setFill(isHead ? Color.web("#8da3b8") : Color.web("#4b5563"));
+                // Use orange for nodes (matching theme)
+                gc.setFill(Color.web("#ff6a00"));
                 gc.fillOval(x - radius, y - radius, radius * 2, radius * 2);
-                gc.setStroke(Color.web("#cfd8dc"));
+                gc.setStroke(Color.web("#ff9b3d"));
+                gc.setLineWidth(2 * scale);
                 gc.strokeOval(x - radius, y - radius, radius * 2, radius * 2);
-                gc.setFill(Color.web("#e0e0e0"));
+                // White text for node hash
+                gc.setFill(Color.WHITE);
                 gc.setFont(Font.font("Consolas", Math.max(8, 10 * scale)));
                 gc.fillText(h, x - radius + 4, y + 4, radius * 2 - 8);
             }
 
         } catch (Exception e) {
             GraphicsContext gc = commitCanvas.getGraphicsContext2D();
+            gc.setFill(Color.WHITE);
+            gc.fillRect(0, 0, commitCanvas.getWidth(), commitCanvas.getHeight());
             gc.setFill(Color.RED);
             gc.fillText("Visual error: " + e.getMessage(), 20, 40);
         }

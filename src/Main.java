@@ -505,7 +505,30 @@ public class Main {
                     cmdLog(oneline);
                     break;
                 case "diff":
-                    DiffManager.showDiff();
+                    if (argsList.size() == 1) {
+                        // smk diff - Working Directory vs Staging Area (unstaged changes)
+                        DiffManager.showDiff();
+                    } else if (argsList.size() == 2 && argsList.get(1).equals("HEAD")) {
+                        // smk diff HEAD - Working Directory vs Last Commit (all changes)
+                        DiffManager.showDiffHead();
+                    } else if (argsList.size() == 3) {
+                        // smk diff <commitA> <commitB> - Commit vs Commit
+                        String commitA = argsList.get(1);
+                        String commitB = argsList.get(2);
+                        // Handle HEAD as special case
+                        if (commitA.equals("HEAD")) {
+                            commitA = CommitManager.readRefHead();
+                        }
+                        if (commitB.equals("HEAD")) {
+                            commitB = CommitManager.readRefHead();
+                        }
+                        DiffManager.showDiffCommits(commitA, commitB);
+                    } else {
+                        System.out.println("Usage: smk diff [HEAD|<commitA> <commitB>]");
+                        System.out.println("  smk diff              - Show unstaged changes (working dir vs staging)");
+                        System.out.println("  smk diff HEAD        - Show all changes (working dir vs last commit)");
+                        System.out.println("  smk diff <A> <B>     - Show differences between two commits");
+                    }
                     break;
                 case "revert":
                     if (argsList.size() < 2) System.out.println("Usage: smk revert <commit>");
