@@ -534,10 +534,6 @@ public class Main {
                     if (argsList.size() < 2) System.out.println("Usage: smk revert <commit>");
                     else cmdRevert(argsList.get(1));
                     break;
-                case "reset":
-                    if (argsList.size() < 2) System.out.println("Usage: smk reset <commit>");
-                    else cmdReset(argsList.get(1));
-                    break;
                 case "clone":
                     if (argsList.size() < 2) System.out.println("Usage: smk clone <path>");
                     else cmdClone(argsList.get(1));
