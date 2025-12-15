@@ -942,7 +942,7 @@ public class GUI extends Application {
             Path smkDir = repoPath.resolve(".smk");
 
             if (!Files.exists(smkDir)) {
-                repoStateLabel.setText("Repository: Not initialized\n\nClick 'smk init' to start");
+                repoStateLabel.setText("Repository: Not initialized\n\nPlease Click 'smk init' to start");
                 branchBadge.setText("none");
                 return;
             }
