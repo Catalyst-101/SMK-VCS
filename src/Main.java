@@ -110,7 +110,7 @@ public class Main {
     public static void cmdLog(boolean oneline) {
         String cur = CommitManager.readRefHead();
         if (cur.isEmpty()) {
-            System.out.println("fatal: your current branch does not have any commits yet");
+            System.out.println("Fatal Error! your current branch does not have any commits yet");
             return;
         }
 
