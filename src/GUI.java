@@ -437,7 +437,7 @@ public class GUI extends Application {
             Path smkDir = repoPath.resolve(".smk");
 
             if (!Files.exists(smkDir)) {
-                treeItems.add("Repository not initialized");
+                treeItems.add("Repository not initialized. Try Again!");
                 Platform.runLater(() -> {
                     smkTreeView.getItems().setAll(treeItems);
                 });
