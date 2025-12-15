@@ -14,14 +14,6 @@ public class CommitManager {
     private static final String SMK_DIR = ".smk";
     private static final String HEAD_FILE = ".smk/HEAD";
 
-    public static String writeTreeFromIndex(final IndexMap idx) {
-        StringBuilder content = new StringBuilder();
-        for (Map.Entry<String, String> kv : idx.entrySet()) {
-            content.append(kv.getKey()).append("\t").append(kv.getValue()).append("\n");
-        }
-        return ObjectManager.hashAndStoreObject("tree", content.toString());
-    }
-
     public static IndexMap readTree(final String treeHash) {
         IndexMap tree = new IndexMap();
         if (treeHash == null || treeHash.isEmpty()) return tree;
@@ -47,6 +39,14 @@ public class CommitManager {
             System.err.println("Error reading tree object: " + e.getMessage());
         }
         return tree;
+    }
+
+    public static String writeTreeFromIndex(final IndexMap idx) {
+        StringBuilder content = new StringBuilder();
+        for (Map.Entry<String, String> kv : idx.entrySet()) {
+            content.append(kv.getKey()).append("\t").append(kv.getValue()).append("\n");
+        }
+        return ObjectManager.hashAndStoreObject("tree", content.toString());
     }
 
     public static IndexMap readTreeFromCommit(final String commitHash) {

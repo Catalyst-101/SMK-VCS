@@ -6,19 +6,24 @@ import java.io.StringReader;
 import java.nio.file.Paths;
 import java.util.Map;
 
-/**
- * Class to handle reading and writing the index (staging area) file.
- * This file maps tracked file paths to their blob hashes.
- */
 public class IndexManager {
 
     private static final String INDEX_FILE = ".smk/index";
 
-    /**
-     * Reads the index file and returns its content as an core.IndexMap.
-     * The index file format is "path<TAB>hash" per line.
-     * @return The core.IndexMap (file path -> blob hash).
-     */
+    public static void writeIndex(final IndexMap idx) {
+        StringBuilder out = new StringBuilder();
+        for (Map.Entry<String, String> kv : idx.entrySet()) {
+            out.append(kv.getKey()).append("\t").append(kv.getValue()).append("\n");
+        }
+
+        try {
+            // Assumed core.Utils.writeFile exists
+            Utils.writeFile(Paths.get(INDEX_FILE), out.toString());
+        } catch (IOException e) {
+            System.err.println("Error writing index file: " + e.getMessage());
+        }
+    }
+
     public static IndexMap readIndex() {
         IndexMap idx = new IndexMap();
         String s;
@@ -50,23 +55,5 @@ public class IndexManager {
         }
 
         return idx;
-    }
-
-    /**
-     * Writes the given core.IndexMap to the index file, overwriting existing content.
-     * @param idx The core.IndexMap (file path -> blob hash) to write.
-     */
-    public static void writeIndex(final IndexMap idx) {
-        StringBuilder out = new StringBuilder();
-        for (Map.Entry<String, String> kv : idx.entrySet()) {
-            out.append(kv.getKey()).append("\t").append(kv.getValue()).append("\n");
-        }
-
-        try {
-            // Assumed core.Utils.writeFile exists
-            Utils.writeFile(Paths.get(INDEX_FILE), out.toString());
-        } catch (IOException e) {
-            System.err.println("Error writing index file: " + e.getMessage());
-        }
     }
 }

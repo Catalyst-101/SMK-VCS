@@ -1,98 +1,64 @@
 package core;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-/**
- * Utility class for file system operations, analogous to the C++ utils.h implementation.
- */
 public class Utils {
 
-    /**
-     * Reads the entire content of a file into a String.
-     * @param path The file path.
-     * @return The content of the file, or an empty string if the file cannot be read.
-     * @throws IOException if an I/O error occurs reading the file.
-     */
-    public static String readFileStr(final String path) throws IOException {
+    // Reads the whole file and returns the text. If the file isn't found, return empty string.
+    public static String readFileStr(String path) throws IOException {
         Path p = Paths.get(path);
-        // Uses StandardCharsets.UTF_8 by default, which is sufficient for simple text files.
         try {
             return Files.readString(p);
-        } catch (java.nio.file.NoSuchFileException e) {
+        } catch (NoSuchFileException e) {
             return "";
         }
     }
 
-    /**
-     * Writes the given data to a file.
-     * @param path The file path.
-     * @param data The string data to write.
-     * @throws IOException if an I/O error occurs, including failure to open the file.
-     */
-    public static void writeFile(final Path path, final String data) throws IOException {
-        // Ensure directories exist before writing
-        if (path.getParent() != null) {
-            Files.createDirectories(path.getParent());
+    // Writes text to a file. Creates the folder if it does not exist.
+    public static void writeFile(Path path, String data) throws IOException {
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
         }
         Files.writeString(path, data);
     }
 
-    /**
-     * Overload for convenience that takes a String path.
-     */
-    public static void writeFile(final String path, final String data) throws IOException {
+    // Overload: allow passing the path as a String.
+    public static void writeFile(String path, String data) throws IOException {
         writeFile(Paths.get(path), data);
     }
 
-    /**
-     * Checks if a path (file or directory) exists.
-     * @param p The path string.
-     * @return true if the path exists, false otherwise.
-     */
-    public static boolean pathExists(final String p) {
+    // Checks if a given file or folder exists.
+    public static boolean pathExists(String p) {
         return Files.exists(Paths.get(p));
     }
 
-    /**
-     * Ensures that a directory (and any necessary parent directories) exists.
-     * @param p The directory path string.
-     * @throws IOException if directory creation fails.
-     */
-    public static void ensureDir(final String p) throws IOException {
+    // Makes sure a folder exists. Creates all missing parent folders too.
+    public static void ensureDir(String p) throws IOException {
         Files.createDirectories(Paths.get(p));
     }
 
-    /**
-     * Recursively lists all regular files within a directory and its subdirectories.
-     * @param dir The directory path string.
-     * @return A list of paths (as strings) to regular files.
-     */
-    public static List<String> listFilesRecursive(final String dir) {
+    // Returns a list of file paths inside a folder, including subfolders.
+    public static List<String> listFilesRecursive(String dir) {
         Path start = Paths.get(dir);
-        try (Stream<Path> stream = Files.walk(start)) {
-            return stream
+
+        try (Stream<Path> walker = Files.walk(start)) {
+            return walker
                     .filter(Files::isRegularFile)
                     .map(Path::toString)
                     .collect(Collectors.toList());
         } catch (IOException e) {
-            System.err.println("Error listing files recursively: " + e.getMessage());
+            System.err.println("Failed to list files: " + e.getMessage());
             return List.of();
         }
     }
 
-    /**
-     * Joins two path components correctly.
-     * @param a The first path component.
-     * @param b The second path component.
-     * @return The combined path string.
-     */
-    public static String joinPath(final String a, final String b) {
+    // Joins two paths into one, correctly handling slashes.
+    public static String joinPath(String a, String b) {
         return Paths.get(a, b).toString();
     }
 }

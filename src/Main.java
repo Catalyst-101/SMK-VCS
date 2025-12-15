@@ -23,11 +23,18 @@ public class Main {
     private static final String INDEX_FILE = SMK_DIR + "/index";
     private static final String CONFIG_FILE = SMK_DIR + "/config";
 
+    /**
+     * Sets up a new SMK repository by creating the folders and files
+     * needed to track commits, branches, and the staging area. It sets
+     * HEAD to point to the default master branch so the repo is ready to use.
+     */
+
     public static void initRepo() {
         if (Files.exists(Paths.get(SMK_DIR))) {
             System.out.println("Repository already initialized.");
             return;
         }
+
         try {
             Utils.ensureDir(SMK_DIR + "/objects");
             Utils.ensureDir(REFS_HEADS_DIR);
@@ -50,7 +57,7 @@ public class Main {
             if (f.startsWith(SMK_DIR + "/") || f.startsWith(SMK_DIR + "\\")) continue;
             if (f.contains("/" + SMK_DIR + "/") || f.contains("\\" + SMK_DIR + "\\")) continue;
             if (f.equals(SMK_DIR)) continue;
-            
+
             // Skip hidden files (starting with .) except in subdirectories
             Path filePath = Paths.get(f);
             if (filePath.getFileName() != null && filePath.getFileName().toString().startsWith(".")) {
@@ -60,11 +67,11 @@ public class Main {
             try {
                 String h = ObjectManager.hashBlobFromFile(f);
                 String headHash = headTree.get(f);
-                
+
                 // Only stage if file is new or changed from HEAD
                 if (headHash == null || !headHash.equals(h)) {
-                idx.put(f, h);
-                System.out.println("add " + f);
+                    idx.put(f, h);
+                    System.out.println("add " + f);
                 }
             } catch (IOException e) {
                 System.err.println("Error processing file " + f + ": " + e.getMessage());
@@ -75,13 +82,13 @@ public class Main {
 
     public static void cmdAdd(final String file) {
         // Never allow adding .smk files
-        if (file.startsWith(SMK_DIR + "/") || file.startsWith(SMK_DIR + "\\") || 
-            file.contains("/" + SMK_DIR + "/") || file.contains("\\" + SMK_DIR + "\\") ||
-            file.equals(SMK_DIR)) {
+        if (file.startsWith(SMK_DIR + "/") || file.startsWith(SMK_DIR + "\\") ||
+                file.contains("/" + SMK_DIR + "/") || file.contains("\\" + SMK_DIR + "\\") ||
+                file.equals(SMK_DIR)) {
             System.out.println("fatal: cannot add .smk directory");
             return;
         }
-        
+
         Path filePath = Paths.get(file);
         if (!Files.exists(filePath)) {
             System.out.println("fatal: pathspec '" + file + "' did not match any files");
@@ -93,12 +100,12 @@ public class Main {
             IndexMap idx = IndexManager.readIndex();
             IndexMap headTree = CommitManager.readHeadTree();
             String headHash = headTree.get(file);
-            
+
             // Only stage if file is new or changed from HEAD
             if (headHash == null || !headHash.equals(h)) {
-            idx.put(file, h);
-            IndexManager.writeIndex(idx);
-            System.out.println("add " + file);
+                idx.put(file, h);
+                IndexManager.writeIndex(idx);
+                System.out.println("add " + file);
             } else {
                 System.out.println("File '" + file + "' unchanged from HEAD, not staged");
             }
@@ -114,7 +121,7 @@ public class Main {
             return;
         }
 
-        while (!cur.isEmpty()) {
+        while (true) {
             ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(cur);
             if (!"commit".equals(obj.type())) break;
 
@@ -125,7 +132,8 @@ public class Main {
 
             if (oneline) {
                 String shortMsg = msg.contains("\n") ? msg.substring(0, msg.indexOf('\n')) : msg;
-                System.out.println(cur + " " + (shortMsg.isEmpty() ? "(no message)" : shortMsg));
+                String shortHash = cur.length() > 7 ? cur.substring(0, 7) : cur;
+                System.out.println(shortHash + " " + (shortMsg.isEmpty() ? "(no message)" : shortMsg));
             } else {
                 System.out.println("commit " + cur + "\n");
                 System.out.println("    " + msg + "\n");
@@ -287,7 +295,7 @@ public class Main {
             Path p = Paths.get(kv.getKey());
             try {
                 if (p.getParent() != null) {
-                Files.createDirectories(p.getParent());
+                    Files.createDirectories(p.getParent());
                 }
                 Utils.writeFile(p, obj.content());
             } catch (IOException e) {
@@ -408,8 +416,7 @@ public class Main {
         List<String> files = Utils.listFilesRecursive(".");
         boolean any = false;
 
-        for (String f : files) {
-            String path = f;
+        for (String path : files) {
             // Never touch .smk directory
             if (path.startsWith(SMK_DIR + "/") || path.startsWith(SMK_DIR + "\\")) continue;
             if (path.contains("/" + SMK_DIR + "/") || path.contains("\\" + SMK_DIR + "\\")) continue;
@@ -435,7 +442,7 @@ public class Main {
 
     public static void main(String[] args) {
         List<String> argsList = Arrays.asList(args);
-        if (argsList.size() < 1) {
+        if (argsList.isEmpty()) {
             System.out.println("usage: smk <command> [args]");
             return;
         }
@@ -505,15 +512,34 @@ public class Main {
                     cmdLog(oneline);
                     break;
                 case "diff":
-                    DiffManager.showDiff();
+                    if (argsList.size() == 1) {
+                        // smk diff - Working Directory vs Staging Area (unstaged changes)
+                        DiffManager.showDiff();
+                    } else if (argsList.size() == 2 && argsList.get(1).equals("HEAD")) {
+                        // smk diff HEAD - Working Directory vs Last Commit (all changes)
+                        DiffManager.showDiffHead();
+                    } else if (argsList.size() == 3) {
+                        // smk diff <commitA> <commitB> - Commit vs Commit
+                        String commitA = argsList.get(1);
+                        String commitB = argsList.get(2);
+                        // Handle HEAD as special case
+                        if (commitA.equals("HEAD")) {
+                            commitA = CommitManager.readRefHead();
+                        }
+                        if (commitB.equals("HEAD")) {
+                            commitB = CommitManager.readRefHead();
+                        }
+                        DiffManager.showDiffCommits(commitA, commitB);
+                    } else {
+                        System.out.println("Usage: smk diff [HEAD|<commitA> <commitB>]");
+                        System.out.println("  smk diff              - Show unstaged changes (working dir vs staging)");
+                        System.out.println("  smk diff HEAD        - Show all changes (working dir vs last commit)");
+                        System.out.println("  smk diff <A> <B>     - Show differences between two commits");
+                    }
                     break;
                 case "revert":
                     if (argsList.size() < 2) System.out.println("Usage: smk revert <commit>");
                     else cmdRevert(argsList.get(1));
-                    break;
-                case "reset":
-                    if (argsList.size() < 2) System.out.println("Usage: smk reset <commit>");
-                    else cmdReset(argsList.get(1));
                     break;
                 case "clone":
                     if (argsList.size() < 2) System.out.println("Usage: smk clone <path>");

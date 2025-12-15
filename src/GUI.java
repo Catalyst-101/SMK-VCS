@@ -5,6 +5,10 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.input.ScrollEvent;
+import javafx.scene.input.ZoomEvent;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -34,7 +38,7 @@ public class GUI extends Application {
     private final StringBuilder terminalBuffer = new StringBuilder();
     private final List<String> commandHistory = new ArrayList<>();
     private int historyIndex = -1;
-    
+
     private final List<Command> commands = List.of(
             new Command("smk init", "Initialize a new repository (.smk)"),
             new Command("smk add <file>", "Add a file to the index"),
@@ -49,14 +53,16 @@ public class GUI extends Application {
             new Command("smk merge <branch>", "Merge a branch into current"),
             new Command("smk log", "Show full commit log"),
             new Command("smk log --oneline", "Show one-line log"),
-            new Command("smk diff", "Show diff of working tree vs index"),
+            new Command("smk diff", "Show diff of working tree vs index (unstaged changes)"),
+            new Command("smk diff HEAD", "Show diff of working tree vs last commit (all changes)"),
+            new Command("smk diff <A> <B>", "Show differences between two commits"),
             new Command("smk revert <commit>", "Revert working tree to a commit"),
 //            new Command("smk reset <commit>", "Reset branch to a commit"),
             new Command("smk clone <path>", "Clone another local repo"),
             new Command("smk show <commit>", "Show metadata and message of a commit"),
             new Command("smk clean", "Remove untracked files")
     );
-    
+
     private ListView<String> fileExplorer;
     private ListView<String> smkTreeView;
     private Canvas commitCanvas;
@@ -68,18 +74,6 @@ public class GUI extends Application {
 
     public static void main(String[] args) {
         launch(args);
-    }
-
-    @Override
-    public void start(Stage stage) {
-        this.primaryStage = stage;
-        createSplashScene();
-        createMainScene();
-        primaryStage.setScene(splashScene);
-        primaryStage.setTitle("SMK VCS");
-        primaryStage.setMinWidth(1000);
-        primaryStage.setMinHeight(600);
-        primaryStage.show();
     }
 
     private void createSplashScene() {
@@ -122,6 +116,18 @@ public class GUI extends Application {
         buttonBox.setAlignment(Pos.CENTER);
         splashLayout.getChildren().addAll(title, subtitle, buttonBox);
         splashScene = new Scene(splashLayout, 900, 600);
+    }
+
+    @Override
+    public void start(Stage stage) {
+        this.primaryStage = stage;
+        createSplashScene();
+        createMainScene();
+        primaryStage.setScene(splashScene);
+        primaryStage.setTitle("SMK VCS");
+        primaryStage.setMinWidth(1000);
+        primaryStage.setMinHeight(600);
+        primaryStage.show();
     }
 
     private void createMainScene() {
@@ -233,6 +239,44 @@ public class GUI extends Application {
         zoomChoice.setOnAction(e -> updateVisuals());
 
         commitCanvas = new Canvas(1200, 900);
+        
+        // Add zoom functionality: Ctrl+wheel and touch/pinch
+        commitCanvas.setOnScroll((ScrollEvent event) -> {
+            if (event.isControlDown()) {
+                double delta = event.getDeltaY();
+                double currentZoom = zoomChoice.getValue();
+                double newZoom = currentZoom;
+                
+                if (delta > 0) {
+                    // Zoom in
+                    newZoom = Math.min(3.0, currentZoom + 0.1);
+                } else if (delta < 0) {
+                    // Zoom out
+                    newZoom = Math.max(0.5, currentZoom - 0.1);
+                }
+                
+                if (newZoom != currentZoom) {
+                    zoomChoice.setValue(newZoom);
+                    updateVisuals();
+                }
+                event.consume();
+            }
+        });
+        
+        // Touch/pinch zoom
+        commitCanvas.setOnZoom((ZoomEvent event) -> {
+            double currentZoom = zoomChoice.getValue();
+            double zoomFactor = event.getZoomFactor();
+            double newZoom = currentZoom * zoomFactor;
+            newZoom = Math.max(0.5, Math.min(3.0, newZoom));
+            
+            if (Math.abs(newZoom - currentZoom) > 0.01) {
+                zoomChoice.setValue(newZoom);
+                updateVisuals();
+            }
+            event.consume();
+        });
+        
         VBox visContent = new VBox(8, zoomLabel, zoomChoice, commitCanvas);
         ScrollPane visScroll = new ScrollPane(visContent);
         visScroll.setFitToWidth(true);
@@ -363,7 +407,7 @@ public class GUI extends Application {
         try {
             List<String> files = new ArrayList<>();
             Path repoPath = Paths.get(currentRepoPath);
-            
+
             if (Files.exists(repoPath)) {
                 try (var stream = Files.walk(repoPath, 3)) {
                     stream.filter(Files::isRegularFile)
@@ -373,7 +417,7 @@ public class GUI extends Application {
                         .forEach(files::add);
                 }
             }
-            
+
             Platform.runLater(() -> {
                 fileExplorer.getItems().setAll(files);
             });
@@ -383,13 +427,13 @@ public class GUI extends Application {
             });
         }
     }
-    
+
     private void updateSMKTreeView() {
         try {
             List<String> treeItems = new ArrayList<>();
             Path repoPath = Paths.get(currentRepoPath);
             Path smkDir = repoPath.resolve(".smk");
-            
+
             if (!Files.exists(smkDir)) {
                 treeItems.add("Repository not initialized");
                 Platform.runLater(() -> {
@@ -397,7 +441,7 @@ public class GUI extends Application {
                 });
                 return;
             }
-            
+
             // Add HEAD
             try {
                 String head = Files.readString(smkDir.resolve("HEAD")).trim();
@@ -405,7 +449,7 @@ public class GUI extends Application {
             } catch (IOException e) {
                 treeItems.add("HEAD: (empty)");
             }
-            
+
             // Add branches with commits (master first)
             Path refsHeads = smkDir.resolve("refs/heads");
             if (Files.exists(refsHeads)) {
@@ -436,7 +480,7 @@ public class GUI extends Application {
                     if (cur != null && !cur.isEmpty()) treeItems.add("   ...");
                 }
             }
-            
+
             Platform.runLater(() -> {
                 smkTreeView.getItems().setAll(treeItems);
             });
@@ -474,7 +518,7 @@ public class GUI extends Application {
             gc.clearRect(0, 0, commitCanvas.getWidth(), commitCanvas.getHeight());
 
             if (!Files.exists(smkDir)) {
-                gc.setFill(Color.GRAY);
+                gc.setFill(Color.BLACK);
                 gc.fillText("Repository not initialized", 20, 40);
                 return;
             }
@@ -541,10 +585,38 @@ public class GUI extends Application {
                 }
             }
 
-            // Depth (older higher): distance from roots (commits with no parents)
-            Set<String> nodes = new HashSet<>(parents.keySet());
-            parents.values().forEach(nodes::addAll);
-            List<String> roots = nodes.stream().filter(h -> parents.getOrDefault(h, List.of()).isEmpty()).collect(Collectors.toList());
+            // Build initial node set from all commits
+            Set<String> allNodes = new HashSet<>(parents.keySet());
+            parents.values().forEach(allNodes::addAll);
+            
+            // Filter nodes: only show commits reachable from at least one branch tip
+            Set<String> reachableNodes = new HashSet<>();
+            for (String tip : branches.values()) {
+                if (tip == null || tip.isBlank()) continue;
+                Deque<String> walk = new ArrayDeque<>();
+                walk.add(tip);
+                Set<String> visited = new HashSet<>();
+                while (!walk.isEmpty()) {
+                    String h = walk.poll();
+                    if (visited.contains(h)) continue;
+                    visited.add(h);
+                    reachableNodes.add(h);
+                    for (String p : parents.getOrDefault(h, List.of())) {
+                        if (!visited.contains(p)) walk.add(p);
+                    }
+                }
+            }
+            
+            // Only work with reachable nodes
+            Set<String> nodes = new HashSet<>(reachableNodes);
+            
+            // Depth (older higher): distance from roots (commits with no parents) - only for reachable nodes
+            List<String> roots = nodes.stream()
+                .filter(h -> {
+                    List<String> ps = parents.getOrDefault(h, List.of());
+                    return ps.isEmpty() || ps.stream().noneMatch(nodes::contains);
+                })
+                .collect(Collectors.toList());
             Map<String, Integer> depth = new HashMap<>();
             Deque<String> dq = new ArrayDeque<>(roots);
             roots.forEach(r -> depth.put(r, 0));
@@ -552,6 +624,7 @@ public class GUI extends Application {
                 String n = dq.poll();
                 int d = depth.getOrDefault(n, 0);
                 for (String c : children.getOrDefault(n, List.of())) {
+                    if (!nodes.contains(c)) continue; // Only consider reachable children
                     int nd = d + 1;
                     if (nd > depth.getOrDefault(c, -1)) {
                         depth.put(c, nd);
@@ -561,29 +634,56 @@ public class GUI extends Application {
             }
             int maxDepth = depth.values().stream().max(Integer::compareTo).orElse(0);
             if (nodes.isEmpty()) {
-                gc.setFill(Color.GRAY);
+                gc.setFill(Color.BLACK);
                 gc.fillText("No commits to visualize", 20, 40);
                 return;
             }
 
             // Column assignment: each branch tip gets its own column; propagate to ancestors
+            // Use a map to track which branches claim which commits
+            Map<String, Set<String>> branchCommits = new HashMap<>();
             Map<String, Integer> col = new HashMap<>();
             int colIdx = 0;
+            
+            // First pass: assign each branch tip to its own column
             for (String b : branches.keySet()) {
                 String tip = branches.get(b);
                 if (tip == null || tip.isBlank()) continue;
+                branchCommits.put(b, new HashSet<>());
                 Deque<String> walk = new ArrayDeque<>();
                 walk.add(tip);
+                Set<String> visited = new HashSet<>();
                 while (!walk.isEmpty()) {
                     String h = walk.poll();
-                    if (!col.containsKey(h)) col.put(h, colIdx);
+                    if (visited.contains(h)) continue;
+                    visited.add(h);
+                    branchCommits.get(b).add(h);
+                    // Assign column if not already assigned (prefer earlier branches)
+                    col.putIfAbsent(h, colIdx);
                     for (String p : parents.getOrDefault(h, List.of())) {
-                        if (!col.containsKey(p)) walk.add(p);
+                        if (!visited.contains(p)) walk.add(p);
                     }
                 }
                 colIdx++;
             }
-            for (String h : nodes) col.putIfAbsent(h, colIdx++); // any remaining
+            
+            // For commits that are in multiple branches, use the column of the first branch that claims it
+            // This ensures all branches are visible even if they point to the same commit
+            for (String h : nodes) {
+                if (!col.containsKey(h)) {
+                    // Find which branch(es) contain this commit
+                    for (String b : branches.keySet()) {
+                        if (branchCommits.get(b).contains(h)) {
+                            col.put(h, col.getOrDefault(branches.get(b), 0));
+                            break;
+                        }
+                    }
+                    // If still not assigned, assign to next available column
+                    if (!col.containsKey(h)) {
+                        col.put(h, colIdx++);
+                    }
+                }
+            }
 
             double scale = 1.0;
             if (zoomChoice != null && zoomChoice.getValue() != null) {
@@ -601,16 +701,18 @@ public class GUI extends Application {
             height = Math.min(height, maxDim);
             commitCanvas.setWidth(width);
             commitCanvas.setHeight(height);
-            gc.setFill(Color.web("#1f2530"));
+            gc.setFill(Color.WHITE);
             gc.fillRect(0, 0, width, height);
 
-            // Draw edges
-            gc.setStroke(Color.web("#9aa5b5"));
+            // Draw edges (only for reachable nodes)
+            gc.setStroke(Color.web("#ff9b3d"));
             gc.setLineWidth(2 * scale);
             for (String h : nodes) {
                 double x1 = 100 * scale + col.getOrDefault(h, 0) * xStep;
                 double y1 = 100 * scale + depth.getOrDefault(h, 0) * yStep;
                 for (String p : parents.getOrDefault(h, List.of())) {
+                    // Only draw edge if parent is also reachable
+                    if (!nodes.contains(p)) continue;
                     double x2 = 100 * scale + col.getOrDefault(p, col.getOrDefault(h,0)) * xStep;
                     double y2 = 100 * scale + depth.getOrDefault(p, 0) * yStep;
                     gc.strokeLine(x1, y1, x2, y2);
@@ -624,22 +726,54 @@ public class GUI extends Application {
                 }
             }
 
+            // Draw branch labels at branch tips - group by commit to show multiple branches on separate lines
+            gc.setFont(Font.font("Consolas", Math.max(10, 12 * scale)));
+            // Group branches by their tip commit
+            Map<String, List<String>> branchesByCommit = new HashMap<>();
+            for (Map.Entry<String, String> br : branches.entrySet()) {
+                String branchName = br.getKey();
+                String tip = br.getValue();
+                if (tip == null || tip.isBlank() || !nodes.contains(tip)) continue;
+                branchesByCommit.computeIfAbsent(tip, k -> new ArrayList<>()).add(branchName);
+            }
+            
+            // Draw branch labels grouped by commit
+            for (Map.Entry<String, List<String>> entry : branchesByCommit.entrySet()) {
+                String tip = entry.getKey();
+                List<String> branchNames = entry.getValue();
+                double x = 100 * scale + col.getOrDefault(tip, 0) * xStep;
+                double y = 100 * scale + depth.getOrDefault(tip, 0) * yStep;
+                double labelY = y - radius;
+                double lineHeight = 14 * scale;
+                
+                // Draw each branch name on a separate line
+                for (int i = 0; i < branchNames.size(); i++) {
+                    gc.setFill(Color.BLACK);
+                    gc.fillText(branchNames.get(i), x + radius + 8, labelY - (i * lineHeight));
+                }
+            }
+
             // Draw nodes
             for (String h : nodes) {
                 double x = 100 * scale + col.getOrDefault(h, 0) * xStep;
                 double y = 100 * scale + depth.getOrDefault(h, 0) * yStep;
                 boolean isHead = h.equals(headHash);
-                gc.setFill(isHead ? Color.web("#8da3b8") : Color.web("#4b5563"));
+                // Use orange for nodes (matching theme)
+                gc.setFill(Color.web("#ff6a00"));
                 gc.fillOval(x - radius, y - radius, radius * 2, radius * 2);
-                gc.setStroke(Color.web("#cfd8dc"));
+                gc.setStroke(Color.web("#ff9b3d"));
+                gc.setLineWidth(2 * scale);
                 gc.strokeOval(x - radius, y - radius, radius * 2, radius * 2);
-                gc.setFill(Color.web("#e0e0e0"));
+                // White text for node hash
+                gc.setFill(Color.WHITE);
                 gc.setFont(Font.font("Consolas", Math.max(8, 10 * scale)));
                 gc.fillText(h, x - radius + 4, y + 4, radius * 2 - 8);
             }
 
         } catch (Exception e) {
             GraphicsContext gc = commitCanvas.getGraphicsContext2D();
+            gc.setFill(Color.WHITE);
+            gc.fillRect(0, 0, commitCanvas.getWidth(), commitCanvas.getHeight());
             gc.setFill(Color.RED);
             gc.fillText("Visual error: " + e.getMessage(), 20, 40);
         }
@@ -673,10 +807,10 @@ public class GUI extends Application {
         new Thread(() -> {
             PrintStream originalOut = System.out;
             PrintStream originalErr = System.err;
-            
+
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             PrintStream ps = new PrintStream(baos, true);
-            
+
             System.setOut(ps);
             System.setErr(ps);
 
@@ -685,11 +819,11 @@ public class GUI extends Application {
                 String[] args = parseCommand(raw);
                 if (args.length > 0 && args[0].equals("smk")) {
                     String[] cmdArgs = Arrays.copyOfRange(args, 1, args.length);
-                    
+
                     // Find project root directory (where src/core/ is located)
                     // Start from current repo path and walk up to find project root
                     File projectRoot = new File(currentRepoPath);
-                    
+
                     // Try to find project root by looking for src/core directory
                     while (projectRoot != null) {
                         File srcCore = new File(projectRoot, "src" + File.separator + "core");
@@ -700,7 +834,7 @@ public class GUI extends Application {
                         if (parent == null) break;
                         projectRoot = parent;
                     }
-                    
+
                     // If not found, try to find just src directory
                     if (projectRoot == null || !new File(projectRoot, "src").exists()) {
                         projectRoot = new File(System.getProperty("user.dir"));
@@ -713,24 +847,24 @@ public class GUI extends Application {
                             projectRoot = checkDir;
                         }
                     }
-                    
+
                     // Build classpath - point to src directory in project root
-                    String classpath = new File(projectRoot, "src").getAbsolutePath() 
+                    String classpath = new File(projectRoot, "src").getAbsolutePath()
                         + File.pathSeparator + System.getProperty("java.class.path");
-                    
+
                     // ProcessBuilder - set working directory to repo, but classpath to project
                     ProcessBuilder pb = new ProcessBuilder();
                     pb.directory(new File(currentRepoPath)); // Main will look for .smk here
                     pb.command("java", "-cp", classpath, "Main");
-                    
+
                     // Add command arguments
                     List<String> command = new ArrayList<>(pb.command());
                     command.addAll(Arrays.asList(cmdArgs));
                     pb.command(command);
-                    
+
                     pb.redirectErrorStream(true);
                     Process process = pb.start();
-                    
+
                     // Read output
                     BufferedReader reader = new BufferedReader(
                         new InputStreamReader(process.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
@@ -739,9 +873,9 @@ public class GUI extends Application {
                     while ((line = reader.readLine()) != null) {
                         output.append(line).append("\n");
                     }
-                    
+
                     process.waitFor();
-                    
+
                     // Update UI on JavaFX thread
                         String finalOutput = output.toString();
                         Platform.runLater(() -> {
@@ -782,7 +916,7 @@ public class GUI extends Application {
         List<String> parts = new ArrayList<>();
         boolean inQuotes = false;
         StringBuilder current = new StringBuilder();
-        
+
         for (char c : raw.toCharArray()) {
             if (c == '"') {
                 inQuotes = !inQuotes;
@@ -798,7 +932,7 @@ public class GUI extends Application {
         if (current.length() > 0) {
             parts.add(current.toString());
         }
-        
+
         return parts.toArray(new String[0]);
     }
 
@@ -806,7 +940,7 @@ public class GUI extends Application {
         try {
             Path repoPath = Paths.get(currentRepoPath);
             Path smkDir = repoPath.resolve(".smk");
-            
+
             if (!Files.exists(smkDir)) {
                 repoStateLabel.setText("Repository: Not initialized\n\nClick 'smk init' to start");
                 branchBadge.setText("none");
@@ -888,7 +1022,7 @@ public class GUI extends Application {
             state.append("Branches: ").append(branchCount).append("\n");
             state.append("Commits: ").append(commitCount).append("\n");
             state.append("Staged Files: ").append(stagedCount).append("\n");
-            
+
             if (!headContent.isEmpty()) {
                 state.append("HEAD: ").append(headContent).append("\n");
             }

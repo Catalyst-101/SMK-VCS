@@ -15,53 +15,81 @@ public class MergeManager {
 
     /**
      * Finds the common ancestor commit between two commit hashes.
+     * Handles merge commits (commits with multiple parents) by following all parents.
      */
     private static String findCommonAncestor(String commit1, String commit2) {
+        // Collect all ancestors of commit1 (including merge commits)
         Set<String> ancestors1 = new HashSet<>();
-        String cur = commit1;
-        while (!cur.isEmpty()) {
+        Deque<String> queue1 = new ArrayDeque<>();
+        queue1.add(commit1);
+        Set<String> visited1 = new HashSet<>();
+        
+        while (!queue1.isEmpty()) {
+            String cur = queue1.poll();
+            if (visited1.contains(cur)) continue;
+            visited1.add(cur);
             ancestors1.add(cur);
+            
             ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(cur);
-            if (!"commit".equals(obj.type())) break;
-            String parent = "";
+            if (!"commit".equals(obj.type())) continue;
+            
+            List<String> parents = new ArrayList<>();
             try (BufferedReader reader = new BufferedReader(new StringReader(obj.content()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (line.startsWith("parent ")) {
-                        parent = line.substring("parent ".length());
-                        break;
+                        parents.add(line.substring("parent ".length()));
                     }
                     if (line.isEmpty()) break;
                 }
             } catch (IOException e) {
                 break;
             }
-            if (parent.isEmpty()) break;
-            cur = parent;
+            
+            // Add all parents to queue (for merge commits)
+            for (String parent : parents) {
+                if (!parent.isEmpty() && !visited1.contains(parent)) {
+                    queue1.add(parent);
+                }
+            }
         }
 
-        cur = commit2;
-        while (!cur.isEmpty()) {
+        // Find first common ancestor when traversing commit2's ancestors
+        Deque<String> queue2 = new ArrayDeque<>();
+        queue2.add(commit2);
+        Set<String> visited2 = new HashSet<>();
+        
+        while (!queue2.isEmpty()) {
+            String cur = queue2.poll();
+            if (visited2.contains(cur)) continue;
+            visited2.add(cur);
+            
             if (ancestors1.contains(cur)) {
                 return cur;
             }
+            
             ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(cur);
-            if (!"commit".equals(obj.type())) break;
-            String parent = "";
+            if (!"commit".equals(obj.type())) continue;
+            
+            List<String> parents = new ArrayList<>();
             try (BufferedReader reader = new BufferedReader(new StringReader(obj.content()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (line.startsWith("parent ")) {
-                        parent = line.substring("parent ".length());
-                        break;
+                        parents.add(line.substring("parent ".length()));
                     }
                     if (line.isEmpty()) break;
                 }
             } catch (IOException e) {
                 break;
             }
-            if (parent.isEmpty()) break;
-            cur = parent;
+            
+            // Add all parents to queue (for merge commits)
+            for (String parent : parents) {
+                if (!parent.isEmpty() && !visited2.contains(parent)) {
+                    queue2.add(parent);
+                }
+            }
         }
 
         return ""; // No common ancestor found
@@ -69,7 +97,10 @@ public class MergeManager {
 
     /**
      * Performs a merge from the target branch to the current HEAD.
-     * Handles both fast-forward and 3-way merges.
+     * Handles fast-forward, three-way merges, and conflicts.
+     * 
+     * IMPORTANT: Branches are NEVER deleted during merge operations.
+     * The source branch remains intact after merging.
      */
     public static void mergeBranch(final String branch) {
         String refPathStr = REFS_HEADS_DIR + branch;
@@ -103,6 +134,8 @@ public class MergeManager {
         String ancestor = findCommonAncestor(cur, target);
         if (ancestor.equals(cur)) {
             // Fast-forward merge: current is ancestor of target
+            // No new commit is created, just move HEAD forward
+            // The source branch is NOT deleted - it still exists
             IndexMap oldTree = CommitManager.readHeadTree();
             IndexMap newTree = CommitManager.readTreeFromCommit(target);
 
@@ -112,32 +145,17 @@ public class MergeManager {
             }
 
             // Update working directory
-            for (final String path : oldTree.keySet()) {
-                if (!newTree.containsKey(path)) {
-                    try {
-                        Files.deleteIfExists(Paths.get(path));
-                    } catch (IOException ignored) {}
-                }
-            }
-
-            for (Map.Entry<String, String> kv : newTree.entrySet()) {
-                ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(kv.getValue());
-                if (!"blob".equals(obj.type())) continue;
-
-                Path p = Paths.get(kv.getKey());
-                try {
-                    if (p.getParent() != null) {
-                        Files.createDirectories(p.getParent());
-                    }
-                    Utils.writeFile(p, obj.content());
-                } catch (IOException e) {
-                    System.err.println("Error writing file during merge: " + e.getMessage());
-                }
-            }
-
-            IndexManager.writeIndex(newTree);
+            UpdatDir(oldTree, newTree);
             CommitManager.writeRefHead(target);
             System.out.println("Fast-forward merged '" + branch + "' into current branch.");
+            System.out.println("Note: Branch '" + branch + "' still exists and was not deleted.");
+            return;
+        }
+        
+        // Check for reverse fast-forward (target is ancestor of current)
+        if (ancestor.equals(target)) {
+            // Current branch already contains all commits from target
+            System.out.println("Already up to date. Current branch contains all commits from '" + branch + "'.");
             return;
         }
 
@@ -223,39 +241,24 @@ public class MergeManager {
         }
 
         if (hasConflicts) {
+            // Merge with conflicts: merge stops, files enter conflicted state
+            // The source branch is NOT deleted - it still exists
+            // User must manually resolve conflicts and commit
             System.out.println("Merge conflicts detected. Resolve conflicts and commit.");
+            System.out.println("Note: Branch '" + branch + "' still exists and was not deleted.");
+            System.out.println("After resolving conflicts, commit to complete the merge.");
             IndexManager.writeIndex(mergedTree);
+            // Note: Merge is aborted if conflicts are not resolved and committed
             return;
         }
 
         // Update working directory with merged tree
         IndexMap oldTree = CommitManager.readHeadTree();
-        for (final String path : oldTree.keySet()) {
-            if (!mergedTree.containsKey(path)) {
-                try {
-                    Files.deleteIfExists(Paths.get(path));
-                } catch (IOException ignored) {}
-            }
-        }
+        UpdatDir(oldTree, mergedTree);
 
-        for (Map.Entry<String, String> kv : mergedTree.entrySet()) {
-            ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(kv.getValue());
-            if (!"blob".equals(obj.type())) continue;
-
-            Path p = Paths.get(kv.getKey());
-            try {
-                if (p.getParent() != null) {
-                    Files.createDirectories(p.getParent());
-                }
-                Utils.writeFile(p, obj.content());
-            } catch (IOException e) {
-                System.err.println("Error writing file during merge: " + e.getMessage());
-            }
-        }
-
-        IndexManager.writeIndex(mergedTree);
-
-        // Create merge commit with two parents
+        // Three-way merge: Create merge commit with two parents
+        // The source branch is NOT deleted - it still exists
+        // Commits from the source branch do not move - master just points to the merge commit
         String treeHash = CommitManager.writeTreeFromIndex(mergedTree);
         StringBuilder meta = new StringBuilder();
         meta.append("tree ").append(treeHash).append("\n");
@@ -270,5 +273,33 @@ public class MergeManager {
         CommitManager.writeRefHead(mergeCommitHash);
 
         System.out.println("Merged '" + branch + "' into current branch. Commit: " + mergeCommitHash);
+        System.out.println("Note: Branch '" + branch + "' still exists and was not deleted.");
+    }
+
+    private static void UpdatDir(IndexMap oldTree, IndexMap newTree) {
+        for (final String path : oldTree.keySet()) {
+            if (!newTree.containsKey(path)) {
+                try {
+                    Files.deleteIfExists(Paths.get(path));
+                } catch (IOException ignored) {}
+            }
+        }
+
+        for (Map.Entry<String, String> kv : newTree.entrySet()) {
+            ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(kv.getValue());
+            if (!"blob".equals(obj.type())) continue;
+
+            Path p = Paths.get(kv.getKey());
+            try {
+                if (p.getParent() != null) {
+                    Files.createDirectories(p.getParent());
+                }
+                Utils.writeFile(p, obj.content());
+            } catch (IOException e) {
+                System.err.println("Error writing file during merge: " + e.getMessage());
+            }
+        }
+
+        IndexManager.writeIndex(newTree);
     }
 }

@@ -16,6 +16,7 @@ public class ObjectManager {
      * @param type The object type ("blob", "tree", "commit").
      * @param content The raw content of the object (excluding header).
      */
+
     public record ObjectContent(String type, String content) {}
 
     /**
