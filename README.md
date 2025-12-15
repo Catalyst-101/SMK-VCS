@@ -1,1 +1,6 @@
 Version Control System in Java for DSA project. UI in JavaFX.
+Group Members:
+Saad Muhammad Khan
+Muhammad Kaif bin Abubakr
+Hammad Ajmal
+Syed Wamiq ul Islam
