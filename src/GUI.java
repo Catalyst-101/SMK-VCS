@@ -299,11 +299,13 @@ public class GUI extends Application {
         branchBadge = new Label("master");
         branchBadge.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #ff6a00; -fx-padding: 3 8; -fx-background-radius: 12px;");
 
-        Label dots = new Label("● ● ●");
-        dots.setStyle("-fx-text-fill: white;");
 
         Label termLabel = new Label("smk terminal");
         termLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: white;");
+
+        Label dots = new Label("● ● ●");
+        dots.setStyle("-fx-text-fill: white;");
+
 
         termHeader.getChildren().addAll(dots, termLabel, branchBadge);
         terminalPanel.getChildren().add(termHeader);
