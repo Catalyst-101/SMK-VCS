@@ -1,3 +1,5 @@
+blob
+21033
 import core.*;
 
 import java.io.BufferedReader;
@@ -530,7 +532,7 @@ public class Main {
                     System.out.println("Unknown command: " + cmd);
             }
         } catch (final Exception e) {
-            System.err.println("Error! Please Try Again.: " + e.getMessage());
+            System.err.println("error: " + e.getMessage());
         }
     }
 }

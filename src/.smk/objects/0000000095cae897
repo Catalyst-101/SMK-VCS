@@ -1,0 +1,276 @@
+blob
+11084
+package core;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.StringReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.*;
+import java.util.Date;
+
+public class MergeManager {
+
+    private static final String REFS_HEADS_DIR = ".smk/refs/heads/";
+
+    /**
+     * Finds the common ancestor commit between two commit hashes.
+     */
+    private static String findCommonAncestor(String commit1, String commit2) {
+        Set<String> ancestors1 = new HashSet<>();
+        String cur = commit1;
+        while (!cur.isEmpty()) {
+            ancestors1.add(cur);
+            ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(cur);
+            if (!"commit".equals(obj.type())) break;
+            String parent = "";
+            try (BufferedReader reader = new BufferedReader(new StringReader(obj.content()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.startsWith("parent ")) {
+                        parent = line.substring("parent ".length());
+                        break;
+                    }
+                    if (line.isEmpty()) break;
+                }
+            } catch (IOException e) {
+                break;
+            }
+            if (parent.isEmpty()) break;
+            cur = parent;
+        }
+
+        cur = commit2;
+        while (!cur.isEmpty()) {
+            if (ancestors1.contains(cur)) {
+                return cur;
+            }
+            ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(cur);
+            if (!"commit".equals(obj.type())) break;
+            String parent = "";
+            try (BufferedReader reader = new BufferedReader(new StringReader(obj.content()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.startsWith("parent ")) {
+                        parent = line.substring("parent ".length());
+                        break;
+                    }
+                    if (line.isEmpty()) break;
+                }
+            } catch (IOException e) {
+                break;
+            }
+            if (parent.isEmpty()) break;
+            cur = parent;
+        }
+
+        return ""; // No common ancestor found
+    }
+
+    /**
+     * Performs a merge from the target branch to the current HEAD.
+     * Handles both fast-forward and 3-way merges.
+     */
+    public static void mergeBranch(final String branch) {
+        String refPathStr = REFS_HEADS_DIR + branch;
+        Path refPath = Paths.get(refPathStr);
+
+        String target;
+        try {
+            target = Utils.readFileStr(refPathStr).trim();
+        } catch (IOException e) {
+            System.out.println("Branch not found: " + branch);
+            return;
+        }
+
+        if (target.isEmpty()) {
+            System.out.println("Branch not found: " + branch);
+            return;
+        }
+
+        String cur = CommitManager.readRefHead();
+        if (cur.isEmpty()) {
+            System.out.println("Cannot merge: no commits in current branch.");
+            return;
+        }
+
+        if (cur.equals(target)) {
+            System.out.println("Already up to date.");
+            return;
+        }
+
+        // Check if fast-forward merge is possible
+        String ancestor = findCommonAncestor(cur, target);
+        if (ancestor.equals(cur)) {
+            // Fast-forward merge: current is ancestor of target
+            IndexMap oldTree = CommitManager.readHeadTree();
+            IndexMap newTree = CommitManager.readTreeFromCommit(target);
+
+            if (newTree.isEmpty()) {
+                System.out.println("Nothing to merge from " + branch + ".");
+                return;
+            }
+
+            // Update working directory
+            for (final String path : oldTree.keySet()) {
+                if (!newTree.containsKey(path)) {
+                    try {
+                        Files.deleteIfExists(Paths.get(path));
+                    } catch (IOException ignored) {}
+                }
+            }
+
+            for (Map.Entry<String, String> kv : newTree.entrySet()) {
+                ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(kv.getValue());
+                if (!"blob".equals(obj.type())) continue;
+
+                Path p = Paths.get(kv.getKey());
+                try {
+                    if (p.getParent() != null) {
+                        Files.createDirectories(p.getParent());
+                    }
+                    Utils.writeFile(p, obj.content());
+                } catch (IOException e) {
+                    System.err.println("Error writing file during merge: " + e.getMessage());
+                }
+            }
+
+            IndexManager.writeIndex(newTree);
+            CommitManager.writeRefHead(target);
+            System.out.println("Fast-forward merged '" + branch + "' into current branch.");
+            return;
+        }
+
+        // 3-way merge
+        IndexMap baseTree = CommitManager.readTreeFromCommit(ancestor);
+        IndexMap curTree = CommitManager.readHeadTree();
+        IndexMap targetTree = CommitManager.readTreeFromCommit(target);
+
+        IndexMap mergedTree = new IndexMap();
+        Set<String> allFiles = new HashSet<>();
+        allFiles.addAll(baseTree.keySet());
+        allFiles.addAll(curTree.keySet());
+        allFiles.addAll(targetTree.keySet());
+
+        boolean hasConflicts = false;
+
+        for (String path : allFiles) {
+            String baseHash = baseTree.get(path);
+            String curHash = curTree.get(path);
+            String targetHash = targetTree.get(path);
+
+            // Determine merge result
+            if (baseHash == null) {
+                // File is new in both branches
+                if (curHash != null && targetHash != null) {
+                    if (!curHash.equals(targetHash)) {
+                        // Conflict: both branches added different content
+                        System.out.println("CONFLICT: " + path + " added in both branches with different content");
+                        hasConflicts = true;
+                        // Take current version for now
+                        mergedTree.put(path, curHash);
+                    } else {
+                        mergedTree.put(path, curHash);
+                    }
+                } else if (curHash != null) {
+                    mergedTree.put(path, curHash);
+                } else if (targetHash != null) {
+                    mergedTree.put(path, targetHash);
+                }
+            } else {
+                // File existed in base
+                if (curHash != null && targetHash != null) {
+                    if (curHash.equals(targetHash)) {
+                        // Both changed the same way
+                        mergedTree.put(path, curHash);
+                    } else if (curHash.equals(baseHash)) {
+                        // Only target changed
+                        mergedTree.put(path, targetHash);
+                    } else if (targetHash.equals(baseHash)) {
+                        // Only current changed
+                        mergedTree.put(path, curHash);
+                    } else {
+                        // Conflict: both changed differently
+                        System.out.println("CONFLICT: " + path + " modified in both branches");
+                        hasConflicts = true;
+                        // Take current version for now
+                        mergedTree.put(path, curHash);
+                    }
+                } else if (curHash != null) {
+                    if (curHash.equals(baseHash)) {
+                        // Deleted in target
+                        // Don't add to merged tree (file is deleted)
+                    } else {
+                        // Modified in current, deleted in target
+                        System.out.println("CONFLICT: " + path + " modified in current, deleted in " + branch);
+                        hasConflicts = true;
+                        mergedTree.put(path, curHash);
+                    }
+                } else if (targetHash != null) {
+                    if (targetHash.equals(baseHash)) {
+                        // Deleted in current
+                        // Don't add to merged tree
+                    } else {
+                        // Modified in target, deleted in current
+                        System.out.println("CONFLICT: " + path + " deleted in current, modified in " + branch);
+                        hasConflicts = true;
+                        mergedTree.put(path, targetHash);
+                    }
+                } else {
+                    // Deleted in both - don't add to merged tree
+                }
+            }
+        }
+
+        if (hasConflicts) {
+            System.out.println("Merge conflicts detected. Resolve conflicts and commit.");
+            IndexManager.writeIndex(mergedTree);
+            return;
+        }
+
+        // Update working directory with merged tree
+        IndexMap oldTree = CommitManager.readHeadTree();
+        for (final String path : oldTree.keySet()) {
+            if (!mergedTree.containsKey(path)) {
+                try {
+                    Files.deleteIfExists(Paths.get(path));
+                } catch (IOException ignored) {}
+            }
+        }
+
+        for (Map.Entry<String, String> kv : mergedTree.entrySet()) {
+            ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(kv.getValue());
+            if (!"blob".equals(obj.type())) continue;
+
+            Path p = Paths.get(kv.getKey());
+            try {
+                if (p.getParent() != null) {
+                    Files.createDirectories(p.getParent());
+                }
+                Utils.writeFile(p, obj.content());
+            } catch (IOException e) {
+                System.err.println("Error writing file during merge: " + e.getMessage());
+            }
+        }
+
+        IndexManager.writeIndex(mergedTree);
+
+        // Create merge commit with two parents
+        String treeHash = CommitManager.writeTreeFromIndex(mergedTree);
+        StringBuilder meta = new StringBuilder();
+        meta.append("tree ").append(treeHash).append("\n");
+        meta.append("parent ").append(cur).append("\n");
+        meta.append("parent ").append(target).append("\n");
+        meta.append("author Local User <local@smk>\n");
+        long t = new Date().getTime() / 1000;
+        meta.append("date ").append(t).append("\n\n");
+        meta.append("Merge branch '").append(branch).append("'\n");
+
+        String mergeCommitHash = ObjectManager.hashAndStoreObject("commit", meta.toString());
+        CommitManager.writeRefHead(mergeCommitHash);
+
+        System.out.println("Merged '" + branch + "' into current branch. Commit: " + mergeCommitHash);
+    }
+}
