@@ -36,6 +36,7 @@ public class Main {
             return;
         }
 
+
         try {
             Utils.ensureDir(SMK_DIR + "/objects");
             Utils.ensureDir(REFS_HEADS_DIR);
