@@ -25,6 +25,9 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * JavaFX front-end for SMK VCS providing command launcher, repo status, and visuals.
+ */
 public class GUI extends Application {
     private Stage primaryStage;
     private Scene splashScene;
@@ -57,7 +60,6 @@ public class GUI extends Application {
             new Command("smk diff HEAD", "Show diff of working tree vs last commit (all changes)"),
             new Command("smk diff <A> <B>", "Show differences between two commits"),
             new Command("smk revert <commit>", "Revert working tree to a commit"),
-//            new Command("smk reset <commit>", "Reset branch to a commit"),
             new Command("smk clone <path>", "Clone another local repo"),
             new Command("smk show <commit>", "Show metadata and message of a commit"),
             new Command("smk clean", "Remove untracked files")
