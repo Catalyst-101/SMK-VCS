@@ -218,7 +218,7 @@ public class Main {
         trackedInIndexAndHead.addAll(headTree.keySet());
 
         for (String f : files) {
-            if (f.startsWith(SMK_DIR) || f.contains(SMK_DIR + "/")) continue;
+            if (f.startsWith(SMK_DIR) || f.contains(SMK_DIR + "/") || f.contains("./" + SMK_DIR + "/")) continue;
             if (!trackedInIndexAndHead.contains(f)) {
                 untracked.add(f);
             }
