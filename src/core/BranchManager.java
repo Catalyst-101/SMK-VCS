@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 
+/**
+ * Handles branch metadata (list/create/delete/checkout) and updates working tree snapshots.
+ */
 public class BranchManager {
 
     private static final String SMK_DIR = ".smk";
