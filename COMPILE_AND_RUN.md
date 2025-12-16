@@ -90,7 +90,7 @@ java -cp "path/to/javafx/lib/*:src" GUI
 ### For Command-Line Only:
 
 ```bash
-# Compile
+# compile
 javac -cp src src/core/*.java src/Main.java
 
 # Run
