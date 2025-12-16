@@ -9,6 +9,9 @@ import java.util.Map;
 import java.util.Date;
 import java.util.ArrayList;
 
+/**
+ * Builds commit objects, writes trees, and reads HEAD/refs to track repository history.
+ */
 public class CommitManager {
 
     private static final String SMK_DIR = ".smk";
