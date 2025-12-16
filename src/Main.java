@@ -15,6 +15,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
+/**
+ * Command-line entry point for SMK VCS; dispatches parsed CLI args to core managers.
+ */
 public class Main {
 
     private static final String SMK_DIR = ".smk";
@@ -307,43 +310,6 @@ public class Main {
         IndexManager.writeIndex(newTree);
 
         CommitManager.createCommit("Revert to " + commitHash, false);
-    }
-
-    public static void cmdReset(final String commitHash) {
-        if (commitHash.isEmpty()) {
-            System.out.println("Usage: smk reset <commit>");
-            return;
-        }
-        IndexMap oldTree = CommitManager.readHeadTree();
-        IndexMap newTree = CommitManager.readTreeFromCommit(commitHash);
-        if (newTree.isEmpty()) {
-            System.out.println("Unknown commit: " + commitHash);
-            return;
-        }
-
-        for (final String path : oldTree.keySet()) {
-            if (!newTree.containsKey(path)) {
-                try {
-                    Files.deleteIfExists(Paths.get(path));
-                } catch (IOException ignored) {}
-            }
-        }
-
-        for (Map.Entry<String, String> kv : newTree.entrySet()) {
-            ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(kv.getValue());
-            if (!"blob".equals(obj.type())) continue;
-
-            Path p = Paths.get(kv.getKey());
-            try {
-                Files.createDirectories(p.getParent());
-                Utils.writeFile(p, obj.content());
-            } catch (IOException e) {
-                System.err.println("Error writing file during reset: " + e.getMessage());
-            }
-        }
-        IndexManager.writeIndex(newTree);
-        CommitManager.writeRefHead(commitHash);
-        System.out.println("Reset to commit " + commitHash);
     }
 
     public static void cmdClone(final String source) {
