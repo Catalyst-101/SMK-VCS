@@ -9,6 +9,9 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.Date;
 
+/**
+ * Implements branch merge logic (fast-forward, 3-way, conflict detection) without deleting branches.
+ */
 public class MergeManager {
 
     private static final String REFS_HEADS_DIR = ".smk/refs/heads/";
