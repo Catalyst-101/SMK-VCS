@@ -1,0 +1,533 @@
+blob
+21960
+import core.*;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.StringReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
+
+/**
+ * Command-line entry point for SMK VCS; dispatches parsed CLI args to core managers.
+ */
+public class Main {
+
+    private static final String SMK_DIR = ".smk";
+    private static final String HEAD_FILE = SMK_DIR + "/HEAD";
+    private static final String REFS_HEADS_DIR = SMK_DIR + "/refs/heads";
+    private static final String INDEX_FILE = SMK_DIR + "/index";
+    private static final String CONFIG_FILE = SMK_DIR + "/config";
+
+    /**
+     * Sets up a new SMK repository by creating the folders and files
+     * needed to track commits, branches, and the staging area. It sets
+     * HEAD to point to the default master branch so the repo is ready to use.
+     */
+
+
+    public static void initRepo() {
+        if (Files.exists(Paths.get(SMK_DIR))) {
+            System.out.println("Repository already initialized.");
+            return;
+        }
+
+
+        try {
+            Utils.ensureDir(SMK_DIR + "/objects");
+            Utils.ensureDir(REFS_HEADS_DIR);
+            Utils.writeFile(Paths.get(HEAD_FILE), "ref: refs/heads/master\n");
+            Utils.writeFile(Paths.get(REFS_HEADS_DIR + "/master"), "\n");
+            Utils.writeFile(Paths.get(INDEX_FILE), "");
+            System.out.println("Initialized empty smk repository");
+        } catch (IOException e) {
+            System.err.println("Error initializing repository: " + e.getMessage());
+        }
+    }
+
+    public static void cmdAddAll() {
+        List<String> files = Utils.listFilesRecursive(".");
+        IndexMap idx = IndexManager.readIndex();
+        IndexMap headTree = CommitManager.readHeadTree();
+
+        for (String f : files) {
+            // Skip .smk directory - must never be tracked
+            if (f.startsWith(SMK_DIR + "/") || f.startsWith(SMK_DIR + "\\")) continue;
+            if (f.contains("/" + SMK_DIR + "/") || f.contains("\\" + SMK_DIR + "\\")) continue;
+            if (f.equals(SMK_DIR)) continue;
+
+            // Skip hidden files (starting with .) except in subdirectories
+            Path filePath = Paths.get(f);
+            if (filePath.getFileName() != null && filePath.getFileName().toString().startsWith(".")) {
+                continue;
+            }
+
+            try {
+                String h = ObjectManager.hashBlobFromFile(f);
+                String headHash = headTree.get(f);
+
+                // Only stage if file is new or changed from HEAD
+                if (headHash == null || !headHash.equals(h)) {
+                    idx.put(f, h);
+                    System.out.println("add " + f);
+                }
+            } catch (IOException e) {
+                System.err.println("Error processing file " + f + ": " + e.getMessage());
+            }
+        }
+        IndexManager.writeIndex(idx);
+    }
+
+    public static void cmdAdd(final String file) {
+        // Never allow adding .smk files
+        if (file.startsWith(SMK_DIR + "/") || file.startsWith(SMK_DIR + "\\") ||
+                file.contains("/" + SMK_DIR + "/") || file.contains("\\" + SMK_DIR + "\\") ||
+                file.equals(SMK_DIR)) {
+            System.out.println("fatal: cannot add .smk directory");
+            return;
+        }
+
+        Path filePath = Paths.get(file);
+        if (!Files.exists(filePath)) {
+            System.out.println("fatal: pathspec '" + file + "' did not match any files");
+            return;
+        }
+
+        try {
+            String h = ObjectManager.hashBlobFromFile(file);
+            IndexMap idx = IndexManager.readIndex();
+            IndexMap headTree = CommitManager.readHeadTree();
+            String headHash = headTree.get(file);
+
+            // Only stage if file is new or changed from HEAD
+            if (headHash == null || !headHash.equals(h)) {
+                idx.put(file, h);
+                IndexManager.writeIndex(idx);
+                System.out.println("add " + file);
+            } else {
+                System.out.println("File '" + file + "' unchanged from HEAD, not staged");
+            }
+        } catch (IOException e) {
+            System.err.println("Error processing file " + file + ": " + e.getMessage());
+        }
+    }
+
+    public static void cmdLog(boolean oneline) {
+        String cur = CommitManager.readRefHead();
+        if (cur.isEmpty()) {
+            System.out.println("Fatal Error! your current branch does not have any commits yet");
+            return;
+        }
+
+        while (true) {
+            ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(cur);
+            if (!"commit".equals(obj.type())) break;
+
+            String meta = obj.content();
+            int blank = meta.indexOf("\n\n");
+            String header = (blank == -1) ? meta : meta.substring(0, blank);
+            String msg = (blank == -1) ? "" : meta.substring(blank + 2).trim();
+
+            if (oneline) {
+                String shortMsg = msg.contains("\n") ? msg.substring(0, msg.indexOf('\n')) : msg;
+                String shortHash = cur.length() > 7 ? cur.substring(0, 7) : cur;
+                System.out.println(shortHash + " " + (shortMsg.isEmpty() ? "(no message)" : shortMsg));
+            } else {
+                System.out.println("commit " + cur + "\n");
+                System.out.println("    " + msg + "\n");
+            }
+
+            String parent = "";
+            try (BufferedReader ss = new BufferedReader(new StringReader(header))) {
+                String line;
+                while ((line = ss.readLine()) != null) {
+                    if (line.startsWith("parent ")) {
+                        parent = line.substring("parent ".length());
+                        break;
+                    }
+                }
+            } catch (IOException e) {
+                // Ignore IO error during parsing
+            }
+
+            if (parent.isEmpty()) break;
+            cur = parent;
+        }
+    }
+
+    public static void cmdStatus() {
+        IndexMap headTree = CommitManager.readHeadTree();
+        IndexMap idx = IndexManager.readIndex();
+
+        List<String> stagedNew = new ArrayList<>();
+        List<String> stagedModified = new ArrayList<>();
+        List<String> stagedDeleted = new ArrayList<>();
+
+        for (Map.Entry<String, String> kv : idx.entrySet()) {
+            final String path = kv.getKey();
+            final String blob = kv.getValue();
+            String headBlob = headTree.get(path);
+
+            if (headBlob == null) {
+                stagedNew.add(path);
+            } else if (!headBlob.equals(blob)) {
+                stagedModified.add(path);
+            }
+        }
+
+        for (Map.Entry<String, String> kv : headTree.entrySet()) {
+            final String path = kv.getKey();
+            if (!idx.containsKey(path)) {
+                stagedDeleted.add(path);
+            }
+        }
+
+        List<String> notStagedModified = new ArrayList<>();
+        List<String> notStagedDeleted = new ArrayList<>();
+
+        for (Map.Entry<String, String> kv : idx.entrySet()) {
+            final String path = kv.getKey();
+            final String stagedBlob = kv.getValue();
+
+            if (!Files.exists(Paths.get(path))) {
+                notStagedDeleted.add(path);
+                continue;
+            }
+
+            try {
+                String workBlob = ObjectManager.hashBlobFromFile(path);
+                if (!workBlob.equals(stagedBlob)) {
+                    notStagedModified.add(path);
+                }
+            } catch (IOException e) {
+                // Ignore IO error during hashing, treat as unchanged or skip
+            }
+        }
+
+        List<String> untracked = new ArrayList<>();
+        List<String> files = Utils.listFilesRecursive(".");
+        Set<String> trackedInIndexAndHead = new HashSet<>();
+        trackedInIndexAndHead.addAll(idx.keySet());
+        trackedInIndexAndHead.addAll(headTree.keySet());
+
+        for (String f : files) {
+            String normalizedF = f.replace("\\", "/");
+            if (normalizedF.startsWith(SMK_DIR + "/") || normalizedF.equals(SMK_DIR)) continue;
+            if (!trackedInIndexAndHead.contains(f)) {
+                untracked.add(f);
+            }
+        }
+
+        System.out.print("On branch ");
+        String head;
+        try {
+            head = Utils.readFileStr(HEAD_FILE).trim();
+        } catch (IOException e) {
+            head = "";
+        }
+
+        final String branchPrefix = "ref: refs/heads/";
+        if (head.startsWith(branchPrefix)) {
+            String name = head.substring(branchPrefix.length());
+            System.out.println(name);
+        } else {
+            System.out.println("(detached HEAD)");
+        }
+
+        if (!stagedNew.isEmpty() || !stagedModified.isEmpty() || !stagedDeleted.isEmpty()) {
+            System.out.println("\nChanges to be committed:");
+            for (String p : stagedNew) System.out.println("  new file:   " + p);
+            for (String p : stagedModified) System.out.println("  modified:   " + p);
+            for (String p : stagedDeleted) System.out.println("  deleted:    " + p);
+        }
+
+        if (!notStagedModified.isEmpty() || !notStagedDeleted.isEmpty()) {
+            System.out.println("\nChanges not staged for commit:");
+            for (String p : notStagedModified) System.out.println("  modified:   " + p);
+            for (String p : notStagedDeleted) System.out.println("  deleted:    " + p);
+        }
+
+        if (!untracked.isEmpty()) {
+            System.out.println("\nUntracked files:");
+            for (String p : untracked) System.out.println("  " + p);
+        }
+
+        if (stagedNew.isEmpty() && stagedModified.isEmpty() && stagedDeleted.isEmpty() &&
+                notStagedModified.isEmpty() && notStagedDeleted.isEmpty() && untracked.isEmpty()) {
+            System.out.println("\nnothing to commit, working tree clean");
+        }
+    }
+
+
+    public static void cmdRevert(final String commitHash) {
+        if (commitHash.isEmpty()) {
+            System.out.println("Usage: smk revert <commit>");
+            return;
+        }
+        IndexMap newTree = CommitManager.readTreeFromCommit(commitHash);
+        if (newTree.isEmpty()) {
+            System.out.println("Unknown commit: " + commitHash);
+            return;
+        }
+
+        IndexMap oldTree = CommitManager.readHeadTree();
+
+        // Delete files that exist in old tree but not in new tree
+        for (final String path : oldTree.keySet()) {
+            if (!newTree.containsKey(path)) {
+                try {
+                    Path filePath = Paths.get(path);
+                    if (Files.exists(filePath)) {
+                        Files.deleteIfExists(filePath);
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error deleting file " + path + ": " + e.getMessage());
+                }
+            }
+        }
+
+        // Restore files from new tree (including deleted files)
+        for (Map.Entry<String, String> kv : newTree.entrySet()) {
+            ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(kv.getValue());
+            if (!"blob".equals(obj.type())) continue;
+
+            Path p = Paths.get(kv.getKey());
+            try {
+                if (p.getParent() != null) {
+                    Files.createDirectories(p.getParent());
+                }
+                Utils.writeFile(p, obj.content());
+            } catch (IOException e) {
+                System.err.println("Error writing file during revert: " + e.getMessage());
+            }
+        }
+        IndexManager.writeIndex(newTree);
+
+        CommitManager.createCommit("Revert to " + commitHash, false);
+    }
+
+    public static void cmdClone(final String source) {
+        if (source.isEmpty()) {
+            System.out.println("Usage: smk clone <path>");
+            return;
+        }
+        Path src = Paths.get(source);
+        if (!Files.exists(src) || !Files.isDirectory(src)) {
+            System.out.println("fatal: clone source not found: " + source);
+            return;
+        }
+        Path dest = src.getFileName();
+        if (Files.exists(dest)) {
+            System.out.println("fatal: destination already exists: " + dest.toString());
+            return;
+        }
+
+        try {
+            Files.createDirectories(dest);
+            try (Stream<Path> walk = Files.walk(src)) {
+                walk.forEach(from -> {
+                    try {
+                        Path rel = src.relativize(from);
+                        Path to = dest.resolve(rel);
+                        if (Files.isDirectory(from)) {
+                            Files.createDirectories(to);
+                        } else if (Files.isRegularFile(from)) {
+                            Files.copy(from, to, StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    } catch (IOException e) {
+                        System.err.println("Error cloning file " + from + ": " + e.getMessage());
+                    }
+                });
+            }
+            System.out.println("Cloned repository to " + dest.toString());
+        } catch (IOException e) {
+            System.err.println("Error cloning repository: " + e.getMessage());
+        }
+    }
+
+    public static void cmdShow(final String commitArg) {
+        String hash = commitArg;
+        if (hash.isEmpty() || "HEAD".equals(hash)) {
+            hash = CommitManager.readRefHead();
+        }
+        if (hash.isEmpty()) {
+            System.out.println("No commits yet.");
+            return;
+        }
+
+        ObjectManager.ObjectContent obj = ObjectManager.readObjectContent(hash);
+        if (!"commit".equals(obj.type())) {
+            System.out.println("Object is not a commit: " + hash);
+            return;
+        }
+        String meta = obj.content();
+        int blank = meta.indexOf("\n\n");
+        String header = (blank == -1) ? meta : meta.substring(0, blank);
+        String msg = (blank == -1) ? "" : meta.substring(blank + 2);
+
+        System.out.println("commit " + hash);
+        System.out.println(header);
+        System.out.println();
+        if (!msg.isEmpty()) System.out.println(msg);
+    }
+
+    public static void cmdClean() {
+        IndexMap headTree = CommitManager.readHeadTree();
+        IndexMap idx = IndexManager.readIndex();
+
+        List<String> files = Utils.listFilesRecursive(".");
+        boolean any = false;
+
+        for (String path : files) {
+            // Never touch .smk directory
+            if (path.startsWith(SMK_DIR + "/") || path.startsWith(SMK_DIR + "\\")) continue;
+            if (path.contains("/" + SMK_DIR + "/") || path.contains("\\" + SMK_DIR + "\\")) continue;
+            if (path.equals(SMK_DIR)) continue;
+
+            // Only remove untracked files (not in index and not in HEAD)
+            // Must not delete committed files
+            if (!idx.containsKey(path) && !headTree.containsKey(path)) {
+                try {
+                    if (Files.deleteIfExists(Paths.get(path))) {
+                        any = true;
+                        System.out.println("removed " + path);
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error removing " + path + ": " + e.getMessage());
+                }
+            }
+        }
+        if (!any) {
+            System.out.println("Nothing to clean.");
+        }
+    }
+
+    public static void main(String[] args) {
+        List<String> argsList = Arrays.asList(args);
+        if (argsList.isEmpty()) {
+            System.out.println("usage: smk <command> [args]");
+            return;
+        }
+        String cmd = argsList.get(0);
+
+        try {
+            switch (cmd) {
+                case "init":
+                    initRepo();
+                    break;
+                case "add":
+                    if (argsList.size() >= 2) {
+                        if (argsList.get(1).equals(".")) cmdAddAll();
+                        else cmdAdd(argsList.get(1));
+                    } else {
+                        System.out.println("Usage: smk add <file>|.");
+                    }
+                    break;
+                case "commit":
+                    boolean amend = false;
+                    String msg = "";
+                    for (int i = 1; i < argsList.size(); ++i) {
+                        if (argsList.get(i).equals("--amend")) amend = true;
+                        if (argsList.get(i).equals("-m") && i + 1 < argsList.size()) msg = argsList.get(i + 1);
+                    }
+                    if (msg.isEmpty()) {
+                        System.out.println("Usage: smk commit -m \"message\"");
+                    } else {
+                        CommitManager.createCommit(msg, amend);
+                    }
+                    break;
+                case "status":
+                    cmdStatus();
+                    break;
+                case "branch":
+                    if (argsList.size() >= 2 && argsList.get(1).equals("-d")) {
+                        if (argsList.size() < 3) {
+                            System.out.println("Usage: smk branch -d <name>");
+                        } else {
+                            BranchManager.deleteBranch(argsList.get(2));
+                        }
+                    } else if (argsList.size() == 1) {
+                        List<String> bs = BranchManager.listBranches();
+                        for (String b : bs) System.out.println(b);
+                    } else {
+                        BranchManager.createBranch(argsList.get(1));
+                    }
+                    break;
+                case "checkout":
+                    if (argsList.size() < 2) {
+                        System.out.println("Usage: smk checkout <branch>");
+                    } else {
+                        String target = argsList.get(1);
+                        if (Files.exists(Paths.get(REFS_HEADS_DIR, target))) {
+                            BranchManager.checkoutBranch(target);
+                        } else {
+                            System.out.println("Branch not found: " + target);
+                        }
+                    }
+                    break;
+                case "merge":
+                    if (argsList.size() < 2) System.out.println("Usage: smk merge <branch>");
+                    else MergeManager.mergeBranch(argsList.get(1));
+                    break;
+                case "log":
+                    boolean oneline = (argsList.size() >= 2 && (argsList.get(1).equals("--oneline") || argsList.get(1).equals("--one-line")));
+                    cmdLog(oneline);
+                    break;
+                case "diff":
+                    if (argsList.size() == 1) {
+                        // smk diff - Working Directory vs Staging Area (unstaged changes)
+                        DiffManager.showDiff();
+                    } else if (argsList.size() == 2 && argsList.get(1).equals("HEAD")) {
+                        // smk diff HEAD - Working Directory vs Last Commit (all changes)
+                        DiffManager.showDiffHead();
+                    } else if (argsList.size() == 3) {
+                        // smk diff <commitA> <commitB> - Commit vs Commit
+                        String commitA = argsList.get(1);
+                        String commitB = argsList.get(2);
+                        // Handle HEAD as special case
+                        if (commitA.equals("HEAD")) {
+                            commitA = CommitManager.readRefHead();
+                        }
+                        if (commitB.equals("HEAD")) {
+                            commitB = CommitManager.readRefHead();
+                        }
+                        DiffManager.showDiffCommits(commitA, commitB);
+                    } else {
+                        System.out.println("Usage: smk diff [HEAD|<commitA> <commitB>]");
+                        System.out.println("  smk diff              - Show unstaged changes (working dir vs staging)");
+                        System.out.println("  smk diff HEAD        - Show all changes (working dir vs last commit)");
+                        System.out.println("  smk diff <A> <B>     - Show differences between two commits");
+                    }
+                    break;
+                case "revert":
+                    if (argsList.size() < 2) System.out.println("Usage: smk revert <commit>");
+                    else cmdRevert(argsList.get(1));
+                    break;
+                case "clone":
+                    if (argsList.size() < 2) System.out.println("Usage: smk clone <path>");
+                    else cmdClone(argsList.get(1));
+                    break;
+                case "show":
+                    String target = (argsList.size() >= 2) ? argsList.get(1) : "HEAD";
+                    cmdShow(target);
+                    break;
+                case "clean":
+                    cmdClean();
+                    break;
+                default:
+                    System.out.println("Unknown command: " + cmd);
+            }
+        } catch (final Exception e) {
+            System.err.println("Error! Please Try Again.: " + e.getMessage());
+        }
+    }
+}

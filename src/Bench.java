@@ -1,5 +1,6 @@
 import core.*;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,24 +31,64 @@ public class Bench {
 
         int[] fileCounts = {1000, 5000, 10000};
 
-        System.out.println("Files\tLines\tAvg Add (ms)\tAvg Commit (ms)\tAvg Diff (ms)\tAvg Checkout (ms)\tAvg Merge (ms)");
+        Path outPath = Paths.get("bench-results.csv");
+        try (BufferedWriter writer = Files.newBufferedWriter(outPath)) {
+            // CSV header
+            writer.write("Files,Lines,Run,AddMs,CommitMs,DiffMs,CheckoutMs,MergeMs");
+            writer.newLine();
 
-        for (int files : fileCounts) {
-            BenchmarkResult r = runBenchmark(files, LINES_PER_FILE, RUNS);
-            System.out.printf(
-                    "%d\t%d\t%.2f\t\t%.2f\t\t\t%.2f\t\t\t%.2f\t\t\t\t%.2f%n",
-                    files,
-                    LINES_PER_FILE,
-                    r.avgAddMs,
-                    r.avgCommitMs,
-                    r.avgDiffMs,
-                    r.avgCheckoutMs,
-                    r.avgMergeMs
-            );
+            System.out.println("Per-run results:");
+            System.out.println("Files\tLines\tRun\tAdd (ms)\tCommit (ms)\tDiff (ms)\tCheckout (ms)\tMerge (ms)");
+
+            for (int files : fileCounts) {
+                BenchmarkResult r = runBenchmark(files, LINES_PER_FILE, RUNS);
+
+                // Print and save each individual run
+                for (int i = 0; i < r.runs; i++) {
+                    System.out.printf(
+                            "%d\t%d\t%d\t%.2f\t\t%.2f\t\t%.2f\t\t%.2f\t\t%.2f%n",
+                            files,
+                            LINES_PER_FILE,
+                            (i + 1),
+                            r.addMs[i],
+                            r.commitMs[i],
+                            r.diffMs[i],
+                            r.checkoutMs[i],
+                            r.mergeMs[i]
+                    );
+
+                    writer.write(String.format(
+                            "%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f",
+                            files,
+                            LINES_PER_FILE,
+                            (i + 1),
+                            r.addMs[i],
+                            r.commitMs[i],
+                            r.diffMs[i],
+                            r.checkoutMs[i],
+                            r.mergeMs[i]
+                    ));
+                    writer.newLine();
+                }
+
+                // After all runs for this file size, print summary averages
+                System.out.printf(
+                        "AVG\t%d\t-\t%.2f\t\t%.2f\t\t%.2f\t\t%.2f\t\t%.2f%n%n",
+                        LINES_PER_FILE,
+                        r.avgAddMs,
+                        r.avgCommitMs,
+                        r.avgDiffMs,
+                        r.avgCheckoutMs,
+                        r.avgMergeMs
+                );
+            }
+
+            System.out.println("\nDetailed CSV results saved to bench-results.csv");
         }
     }
 
     private static BenchmarkResult runBenchmark(int files, int linesPerFile, int runs) throws Exception {
+        BenchmarkResult r = new BenchmarkResult(runs);
         double sumAdd = 0, sumCommit = 0, sumDiff = 0, sumCheckout = 0, sumMerge = 0;
 
         for (int i = 0; i < runs; i++) {
@@ -92,14 +133,25 @@ public class Bench {
             MergeManager.mergeBranch("feature");
             long t9 = System.nanoTime();
 
-            sumAdd += (t1 - t0) / 1_000_000.0;
-            sumCommit += (t3 - t2) / 1_000_000.0;
-            sumDiff += (t5 - t4) / 1_000_000.0;
-            sumCheckout += (t7 - t6) / 1_000_000.0;
-            sumMerge += (t9 - t8) / 1_000_000.0;
+            double addMs = (t1 - t0) / 1_000_000.0;
+            double commitMs = (t3 - t2) / 1_000_000.0;
+            double diffMs = (t5 - t4) / 1_000_000.0;
+            double checkoutMs = (t7 - t6) / 1_000_000.0;
+            double mergeMs = (t9 - t8) / 1_000_000.0;
+
+            r.addMs[i] = addMs;
+            r.commitMs[i] = commitMs;
+            r.diffMs[i] = diffMs;
+            r.checkoutMs[i] = checkoutMs;
+            r.mergeMs[i] = mergeMs;
+
+            sumAdd += addMs;
+            sumCommit += commitMs;
+            sumDiff += diffMs;
+            sumCheckout += checkoutMs;
+            sumMerge += mergeMs;
         }
 
-        BenchmarkResult r = new BenchmarkResult();
         r.avgAddMs = sumAdd / runs;
         r.avgCommitMs = sumCommit / runs;
         r.avgDiffMs = sumDiff / runs;
@@ -161,11 +213,27 @@ public class Bench {
     }
 
     private static class BenchmarkResult {
+        final int runs;
+        final double[] addMs;
+        final double[] commitMs;
+        final double[] diffMs;
+        final double[] checkoutMs;
+        final double[] mergeMs;
+
         double avgAddMs;
         double avgCommitMs;
         double avgDiffMs;
         double avgCheckoutMs;
         double avgMergeMs;
+
+        BenchmarkResult(int runs) {
+            this.runs = runs;
+            this.addMs = new double[runs];
+            this.commitMs = new double[runs];
+            this.diffMs = new double[runs];
+            this.checkoutMs = new double[runs];
+            this.mergeMs = new double[runs];
+        }
     }
 }
 

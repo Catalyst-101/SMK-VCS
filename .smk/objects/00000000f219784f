@@ -1,0 +1,69 @@
+blob
+2242
+package core;
+
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+/**
+ * Small helper methods for filesystem IO and path utilities used across the VCS.
+ */
+public class Utils {
+
+    // Reads the whole file and returns the text. If the file isn't found, return empty string.
+    public static String readFileStr(String path) throws IOException {
+        Path p = Paths.get(path);
+        try {
+            return Files.readString(p);
+        } catch (NoSuchFileException e) {
+            return "";
+        }
+    }
+
+    // Writes text to a file. Creates the folder if it does not exist.
+    public static void writeFile(Path path, String data) throws IOException {
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(path, data);
+    }
+
+    // Overload: allow passing the path as a String.
+    public static void writeFile(String path, String data) throws IOException {
+        writeFile(Paths.get(path), data);
+    }
+
+    // Checks if a given file or folder exists.
+    public static boolean pathExists(String p) {
+        return Files.exists(Paths.get(p));
+    }
+
+    // Makes sure a folder exists. Creates all missing parent folders too.
+    public static void ensureDir(String p) throws IOException {
+        Files.createDirectories(Paths.get(p));
+    }
+
+    // Returns a list of file paths inside a folder, including subfolders.
+    public static List<String> listFilesRecursive(String dir) {
+        Path start = Paths.get(dir);
+
+        try (Stream<Path> walker = Files.walk(start)) {
+            return walker
+                    .filter(Files::isRegularFile)
+                    .map(Path::toString)
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            System.err.println("Failed to list files: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    // Joins two paths into one, correctly handling slashes.
+    public static String joinPath(String a, String b) {
+        return Paths.get(a, b).toString();
+    }
+}
