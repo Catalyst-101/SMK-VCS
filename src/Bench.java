@@ -1,0 +1,172 @@
+import core.*;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Locale;
+
+/**
+ * Benchmark driver for SMK VCS.
+ *
+ * Generates synthetic repositories of different sizes and measures
+ * the average execution time of core operations:
+ *  - add (add .)
+ *  - commit
+ *  - diff
+ *  - checkout
+ *  - merge
+ *
+ * Results are printed in a table suitable for the project report.
+ */
+public class Bench {
+
+    private static final String REPO_ROOT = ".";
+    private static final int LINES_PER_FILE = 100;
+    private static final int RUNS = 3;
+
+    public static void main(String[] args) throws Exception {
+        Locale.setDefault(Locale.US);
+
+        int[] fileCounts = {1000, 5000, 10000};
+
+        System.out.println("Files\tLines\tAvg Add (ms)\tAvg Commit (ms)\tAvg Diff (ms)\tAvg Checkout (ms)\tAvg Merge (ms)");
+
+        for (int files : fileCounts) {
+            BenchmarkResult r = runBenchmark(files, LINES_PER_FILE, RUNS);
+            System.out.printf(
+                    "%d\t%d\t%.2f\t\t%.2f\t\t\t%.2f\t\t\t%.2f\t\t\t\t%.2f%n",
+                    files,
+                    LINES_PER_FILE,
+                    r.avgAddMs,
+                    r.avgCommitMs,
+                    r.avgDiffMs,
+                    r.avgCheckoutMs,
+                    r.avgMergeMs
+            );
+        }
+    }
+
+    private static BenchmarkResult runBenchmark(int files, int linesPerFile, int runs) throws Exception {
+        double sumAdd = 0, sumCommit = 0, sumDiff = 0, sumCheckout = 0, sumMerge = 0;
+
+        for (int i = 0; i < runs; i++) {
+            cleanRepo();
+            generateFiles(files, linesPerFile, i);
+
+            // init
+            Main.initRepo();
+
+            // add .
+            long t0 = System.nanoTime();
+            Main.cmdAddAll();
+            long t1 = System.nanoTime();
+
+            // commit
+            long t2 = System.nanoTime();
+            CommitManager.createCommit("bench run " + (i + 1), false);
+            long t3 = System.nanoTime();
+
+            // make a small change in half the files for diff/merge/checkout tests
+            modifySubset(files, linesPerFile, i);
+
+            // diff (working vs HEAD)
+            long t4 = System.nanoTime();
+            DiffManager.showDiffHead();
+            long t5 = System.nanoTime();
+
+            // create a feature branch and commit on it
+            BranchManager.createBranch("feature");
+            BranchManager.checkoutBranch("feature");
+
+            Main.cmdAddAll();
+            CommitManager.createCommit("feature changes run " + (i + 1), false);
+
+            // checkout master (this benchmarks checkout)
+            long t6 = System.nanoTime();
+            BranchManager.checkoutBranch("master");
+            long t7 = System.nanoTime();
+
+            // merge feature into master
+            long t8 = System.nanoTime();
+            MergeManager.mergeBranch("feature");
+            long t9 = System.nanoTime();
+
+            sumAdd += (t1 - t0) / 1_000_000.0;
+            sumCommit += (t3 - t2) / 1_000_000.0;
+            sumDiff += (t5 - t4) / 1_000_000.0;
+            sumCheckout += (t7 - t6) / 1_000_000.0;
+            sumMerge += (t9 - t8) / 1_000_000.0;
+        }
+
+        BenchmarkResult r = new BenchmarkResult();
+        r.avgAddMs = sumAdd / runs;
+        r.avgCommitMs = sumCommit / runs;
+        r.avgDiffMs = sumDiff / runs;
+        r.avgCheckoutMs = sumCheckout / runs;
+        r.avgMergeMs = sumMerge / runs;
+        return r;
+    }
+
+    private static void cleanRepo() throws IOException {
+        // Remove .smk directory and generated files under bench-files/
+        deleteRecursively(Paths.get(".smk"));
+        deleteRecursively(Paths.get("bench-files"));
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (!Files.exists(root)) return;
+        Files.walk(root)
+                .sorted((a, b) -> b.getNameCount() - a.getNameCount()) // delete children first
+                .forEach(p -> {
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (IOException ignored) {
+                    }
+                });
+    }
+
+    private static void generateFiles(int count, int linesPerFile, int seed) throws IOException {
+        Path base = Paths.get("bench-files");
+        Files.createDirectories(base);
+
+        StringBuilder content = new StringBuilder();
+        for (int i = 0; i < linesPerFile; i++) {
+            content.append("line ").append(i).append(" seed ").append(seed).append("\n");
+        }
+        String text = content.toString();
+
+        for (int i = 0; i < count; i++) {
+            Path p = base.resolve("file_" + i + ".txt");
+            Files.writeString(p, text);
+        }
+    }
+
+    private static void modifySubset(int totalFiles, int linesPerFile, int seed) throws IOException {
+        Path base = Paths.get("bench-files");
+        int step = 2; // modify half the files
+
+        StringBuilder content = new StringBuilder();
+        for (int i = 0; i < linesPerFile; i++) {
+            content.append("line ").append(i).append(" modified ").append(seed).append("\n");
+        }
+        String text = content.toString();
+
+        for (int i = 0; i < totalFiles; i += step) {
+            Path p = base.resolve("file_" + i + ".txt");
+            if (Files.exists(p)) {
+                Files.writeString(p, text);
+            }
+        }
+    }
+
+    private static class BenchmarkResult {
+        double avgAddMs;
+        double avgCommitMs;
+        double avgDiffMs;
+        double avgCheckoutMs;
+        double avgMergeMs;
+    }
+}
+
+

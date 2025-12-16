@@ -1,0 +1,90 @@
+## SMK VCS – Benchmarking and Efficiency Analysis
+
+This document summarizes how we measured and analyzed the efficiency of our Version Control System (SMK VCS).
+
+### 1. Objective
+
+Measure the performance of core VCS operations on synthetic repositories of different sizes and compare the observed times with their Big-O complexity:
+
+- **add** – stage files for commit  
+- **commit** – create a snapshot of staged files  
+- **diff** – compare working directory with HEAD  
+- **checkout** – restore files from a branch  
+- **merge** – merge a feature branch into master  
+
+### 2. Benchmark Driver
+
+We implemented a Java benchmark driver in `Bench.java`. It:
+
+- Generates a synthetic repository under `bench-files/` with **N files** and **L lines per file**.  
+- Initializes a new `.smk` repository.  
+- Runs and times the following operations using `System.nanoTime()`:
+  - `add .` via `Main.cmdAddAll()`
+  - `commit` via `CommitManager.createCommit(...)`
+  - `diff` via `DiffManager.showDiffHead()`
+  - `checkout` via `BranchManager.checkoutBranch("master")`
+  - `merge` via `MergeManager.mergeBranch("feature")`
+- Repeats each benchmark **3 times** and reports the average time in milliseconds.
+
+Run it with:
+
+```bash
+javac -cp src src/Bench.java
+java -cp src;. Bench
+```
+
+### 3. Input Sizes
+
+We used three repository sizes:
+
+| Size   | Files (N) | Lines per file (L) |
+|--------|-----------|--------------------|
+| Small  | 1,000     | 100                |
+| Medium | 5,000     | 100                |
+| Large  | 10,000    | 100                |
+
+Each configuration is run **3 times**; we report the average.
+
+### 4. Big-O Expectations
+
+Let **F** be the number of files and **S** the average lines (size) per file, and **L** be the total number of lines actually compared in a diff or merge.
+
+| Operation | Theoretical Complexity |
+|----------|------------------------|
+| add      | \(O(F \cdot S)\)       |
+| commit   | \(O(F \cdot S)\)       |
+| diff     | \(O(F + L)\)           |
+| checkout | \(O(F \cdot S)\)       |
+| merge    | \(O(F + L)\)           |
+
+Explanation:
+
+- **add**: hashes every file and updates the index map (linear in total data read).  
+- **commit**: serializes the index/tree and stores commit objects (linear in number of entries and their content).  
+- **diff**: traverses all tracked/working files and compares line-by-line only where needed.  
+- **checkout**: rewrites files in the working directory from blob objects.  
+- **merge**: performs a 3-way merge on all files present in either branch, comparing hashes and, when needed, file contents.
+
+### 5. Example Results Table
+
+After running `Bench`, we obtain a table of the form:
+
+| Files | Lines | Avg Add (ms) | Avg Commit (ms) | Avg Diff (ms) | Avg Checkout (ms) | Avg Merge (ms) |
+|-------|-------|--------------|-----------------|---------------|-------------------|----------------|
+| 1,000 | 100   | …            | …               | …             | …                 | …              |
+| 5,000 | 100   | …            | …               | …             | …                 | …              |
+| 10,000| 100   | …            | …               | …             | …                 | …              |
+
+You can copy this table into the final report and fill in the measured values.
+
+### 6. Discussion Template
+
+When interpreting the results, we check that:
+
+- The **add** and **commit** times grow roughly linearly with the total data size \(F \cdot S\).  
+- **diff**, **checkout**, and **merge** also show near-linear scaling with the number of files and lines involved.  
+- Any large constant factors or irregularities (e.g., spikes on large inputs) can be explained by disk IO, JVM warm-up, or OS file caching effects.
+
+This provides both **empirical evidence** (measured timings) and **theoretical justification** (Big-O notation) for the efficiency of our VCS algorithms.
+
+
