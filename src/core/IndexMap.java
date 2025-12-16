@@ -2,4 +2,7 @@ package core;
 
 import java.util.HashMap;
 
+/**
+ * Convenience map for file path to blob hash mappings used by index/trees.
+ */
 public class IndexMap extends HashMap<String, String> {}
