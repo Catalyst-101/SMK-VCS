@@ -6,6 +6,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Objects;
 
+/**
+ * Stores and retrieves content-addressed objects (blobs, trees, commits) in .smk/objects.
+ */
 public class ObjectManager {
 
     private static final String VCS_DIR = ".smk";

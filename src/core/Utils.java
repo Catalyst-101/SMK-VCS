@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Small helper methods for filesystem IO and path utilities used across the VCS.
+ */
 public class Utils {
 
     // Reads the whole file and returns the text. If the file isn't found, return empty string.
