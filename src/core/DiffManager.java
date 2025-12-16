@@ -12,6 +12,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Produces human-readable diffs between working tree, index, and commit trees.
+ */
 public class DiffManager {
 
     /**
