@@ -6,6 +6,9 @@ import java.io.StringReader;
 import java.nio.file.Paths;
 import java.util.Map;
 
+/**
+ * Serializes and deserializes the staging index between memory and .smk/index.
+ */
 public class IndexManager {
 
     private static final String INDEX_FILE = ".smk/index";
