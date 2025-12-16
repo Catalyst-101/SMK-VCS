@@ -29,6 +29,7 @@ public class Main {
      * HEAD to point to the default master branch so the repo is ready to use.
      */
 
+
     public static void initRepo() {
         if (Files.exists(Paths.get(SMK_DIR))) {
             System.out.println("Repository already initialized.");
